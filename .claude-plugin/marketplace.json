@@ -1,0 +1,11 @@
+{
+  "name": "buddy",
+  "owner": { "name": "Buddy" },
+  "plugins": [
+    {
+      "name": "buddy",
+      "source": "./core",
+      "description": "The Product Owner's companion for AI-assisted software development."
+    }
+  ]
+}

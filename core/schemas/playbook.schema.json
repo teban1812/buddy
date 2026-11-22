@@ -1,0 +1,67 @@
+{
+  "$comment": "A playbook describes one kind of job. Front matter is the machine part; the body is the prose a human or an agent reads.",
+  "type": "object",
+  "required": ["schema", "id", "title", "version", "summary", "roles", "artifacts", "stages", "checks", "gates", "done"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "buddy/playbook@0" },
+    "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+    "title": { "type": "string", "minLength": 1 },
+    "version": { "type": "string", "pattern": "^\\d+\\.\\d+\\.\\d+$" },
+    "summary": { "type": "string", "minLength": 1 },
+    "status": { "enum": ["v1", "experimental", "example"] },
+    "human_decides": { "type": "array", "items": { "type": "string" } },
+    "inputs": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+        "properties": { "id": { "type": "string" }, "kind": { "enum": ["text", "file", "answer"] }, "required": { "type": "boolean" }, "description": { "type": "string" } } }
+    },
+    "roles": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "required": ["id", "kind"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "kind": { "enum": ["human", "agent", "reviewer", "program"] },
+          "may_write": { "enum": ["nothing", "docs", "source", "records"] },
+          "sees": { "type": "array", "items": { "type": "string" } },
+          "independent": { "type": "boolean" },
+          "description": { "type": "string" } } }
+    },
+    "artifacts": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "required": ["id", "kind", "owner"], "additionalProperties": false,
+        "properties": { "id": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "kind": { "enum": ["code", "doc", "record", "evidence"] }, "schema": { "type": "string" }, "path": { "type": "string" }, "owner": { "type": "string" }, "description": { "type": "string" } } }
+    },
+    "stages": {
+      "type": "array", "minItems": 1,
+      "items": { "type": "object", "required": ["id", "role", "purpose"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "role": { "type": "string" },
+          "purpose": { "type": "string", "minLength": 1 },
+          "reads": { "type": "array", "items": { "type": "string" } },
+          "produces": { "type": "array", "items": { "type": "string" } },
+          "checks": { "type": "array", "items": { "type": "string" } },
+          "gate": { "type": "string" },
+          "ask": { "type": "object", "additionalProperties": false,
+            "properties": { "batch": { "type": "string" }, "max_rounds": { "type": "integer", "minimum": 1 }, "only_if": { "type": "string" } } },
+          "repeat_until": { "type": "string" } } }
+    },
+    "checks": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "kind", "what"], "additionalProperties": false,
+        "properties": { "id": { "type": "string", "pattern": "^[a-z0-9-]+$" }, "kind": { "enum": ["program", "reviewer"] }, "what": { "type": "string", "minLength": 1 }, "run": { "type": "string" }, "finding_class": { "type": "string" }, "blocking": { "type": "boolean" } } }
+    },
+    "gates": {
+      "type": "array",
+      "items": { "type": "object", "required": ["id", "mode", "human_sees"], "additionalProperties": false,
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9-]+$" },
+          "mode": { "enum": ["exception", "always"] },
+          "triggers": { "type": "array", "items": { "type": "string" } },
+          "human_sees": { "type": "array", "minItems": 1, "items": { "type": "string" } } } }
+    },
+    "done": { "type": "array", "minItems": 1, "items": { "type": "string", "minLength": 1 } },
+    "postponed": { "type": "string" }
+  }
+}

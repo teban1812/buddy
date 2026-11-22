@@ -1,0 +1,40 @@
+{
+  "$comment": "Front matter of docs/context.md. Statements live in the body as bullets that end with an origin tag; they are checked by verify.mjs, not by this schema. risk_assumed_accepted: the date the owner explicitly chose to continue with the risk appetite left assumed. risk_section: the heading of the section that holds the risk appetite, when it is not 'Risk appetite' (a context written in another language).",
+  "type": "object",
+  "required": [
+    "schema",
+    "title",
+    "updated"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "buddy/context@0"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "owner": {
+      "type": "string"
+    },
+    "status": {
+      "enum": [
+        "draft",
+        "active"
+      ]
+    },
+    "risk_section": {
+      "type": "string",
+      "minLength": 1
+    },
+    "risk_assumed_accepted": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    }
+  }
+}

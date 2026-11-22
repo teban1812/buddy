@@ -1,0 +1,3 @@
+# Every text file is checked out with LF, also on Windows: the git hooks are shell scripts (a CR breaks them),
+# and Buddy's records are compared byte for byte with what the program writes (buddy verify --canonical).
+* text=auto eol=lf

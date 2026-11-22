@@ -1,0 +1,115 @@
+{
+  "$comment": "Something a program, the independent reviewer or the human found: docs/buddy/findings/<id>.md. Core classes are closed; a playbook adds its own with the prefix x-.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "slice",
+    "source",
+    "class",
+    "severity",
+    "status",
+    "summary"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "buddy/finding@0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^F-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+    },
+    "slice": {
+      "type": "string",
+      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+    },
+    "source": {
+      "enum": [
+        "program",
+        "reviewer",
+        "human"
+      ]
+    },
+    "class": {
+      "anyOf": [
+        {
+          "enum": [
+            "validate-failed",
+            "tests-deleted",
+            "tests-weakened",
+            "skip-marker",
+            "protected-file",
+            "no-tests",
+            "scope-growth",
+            "unspecified-decision",
+            "unconfirmed-default",
+            "does-not-do-what-was-asked",
+            "spec-gap",
+            "spec-ambiguity",
+            "standards-deviation",
+            "ux-divergence",
+            "ux-improvement",
+            "needs-standards-owner",
+            "other"
+          ]
+        },
+        {
+          "type": "string",
+          "pattern": "^x-[a-z0-9-]+$"
+        }
+      ]
+    },
+    "severity": {
+      "enum": [
+        "info",
+        "needs-human",
+        "blocking"
+      ]
+    },
+    "status": {
+      "enum": [
+        "open",
+        "accepted",
+        "resolved",
+        "rejected"
+      ]
+    },
+    "summary": {
+      "type": "string",
+      "minLength": 1
+    },
+    "evidence": {
+      "type": "string"
+    },
+    "disposition": {
+      "type": "object",
+      "required": [
+        "by",
+        "at",
+        "reason"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "enum": [
+            "human",
+            "rule"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+        },
+        "reason": {
+          "type": "string",
+          "minLength": 1
+        },
+        "decision": {
+          "type": "string",
+          "pattern": "^D-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+        }
+      }
+    }
+  }
+}

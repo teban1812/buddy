@@ -1,0 +1,443 @@
+{
+  "$comment": "buddy/slice@1 (the only slice version): a milestone (kind milestone, its milestone.md), a change (its change.md) or a slice of a change. Where they live: core/src/slicestore.mjs. Design: docs/design/14-slice-format-and-standards.md section 3. Steps live in the body (## Steps), not here.",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "title",
+    "kind",
+    "status",
+    "rank",
+    "created",
+    "request"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "buddy/slice@1"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+    },
+    "title": {
+      "type": "string",
+      "minLength": 1
+    },
+    "kind": {
+      "enum": [
+        "feat",
+        "fix",
+        "chore",
+        "refactor",
+        "docs",
+        "perf",
+        "test",
+        "spike",
+        "epic",
+        "milestone"
+      ]
+    },
+    "status": {
+      "enum": [
+        "refining",
+        "ready",
+        "building",
+        "blocked",
+        "delivered",
+        "rework",
+        "accepted",
+        "abandoned"
+      ]
+    },
+    "rank": {
+      "type": "integer",
+      "minimum": 0
+    },
+    "epic": {
+      "type": "string",
+      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+    },
+    "depends_on": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+      }
+    },
+    "branch": {
+      "type": "string",
+      "minLength": 1
+    },
+    "base": {
+      "$comment": "the commit the slice was at when it first moved to building: the checkpoint measures the slice's changes from here (measure-slice-own-changes)",
+      "type": "string",
+      "pattern": "^[0-9a-f]{40}([0-9a-f]{24})?$"
+    },
+    "created": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "request": {
+      "type": "string",
+      "minLength": 1
+    },
+    "batches": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^B-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+    },
+    "decisions": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^D-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+    },
+    "findings": {
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^F-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+      }
+    },
+    "criteria": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^AC\\d+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "excludes": {
+      "$comment": "what the change or slice does not include, in the owner's terms (R109): X1, X2...; required, with criteria, to be ready (R114)",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^X\\d+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "assumptions": {
+      "$comment": "what Buddy will assume, announced before building (R136): A1, A2..., at most five, costliest first; the owner confirms each or corrects it (the correction becomes a criterion or an exclusion); an empty list means studied and nothing to assume, no list means not studied yet",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "if_otherwise",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^A\\d+$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "if_otherwise": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "proposed",
+              "confirmed",
+              "corrected"
+            ]
+          },
+          "correction": {
+            "$comment": "the criterion or exclusion a corrected assumption became, written in the same command (R139)",
+            "type": "string",
+            "pattern": "^(AC|X)\\d+$"
+          }
+        }
+      }
+    },
+    "screens": {
+      "$comment": "the prototype's screens this change covers (names in the manifest, R107); fixed when the change is ready, like the criteria; they reach Dev and the reviewer by file (R119)",
+      "type": "array",
+      "items": {
+        "type": "string",
+        "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+      }
+    },
+    "divergences": {
+      "$comment": "declared departures from the prototype (R127): V1, V2...; Dev declares, the owner accepts or rejects each on the accept card",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "screen",
+          "prototype",
+          "built",
+          "why",
+          "kind",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^V\\d+$"
+          },
+          "screen": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "prototype": {
+            "type": "string",
+            "minLength": 1
+          },
+          "built": {
+            "type": "string",
+            "minLength": 1
+          },
+          "why": {
+            "type": "string",
+            "minLength": 1
+          },
+          "kind": {
+            "enum": [
+              "improvement",
+              "divergence"
+            ]
+          },
+          "status": {
+            "enum": [
+              "declared",
+              "accepted",
+              "rejected"
+            ]
+          },
+          "decided": {
+            "type": "object",
+            "required": [
+              "by",
+              "at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "by": {
+                "enum": [
+                  "owner"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+              },
+              "channel": {
+                "enum": [
+                  "chat",
+                  "cli",
+                  "view"
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "reclassified": {
+      "$comment": "corrections of the reviewer's mark on a decision nobody specified (R136, R139, R140): kept here, never in the evidence; `evidence` names the evidence file whose review holds decision n; Buddy may raise one to costly, only the owner lowers one to cheap; the latest entry for a decision wins",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "evidence",
+          "n",
+          "costly",
+          "by",
+          "at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "evidence": {
+            "type": "string",
+            "pattern": "^evidence-.*\\.json$"
+          },
+          "n": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "costly": {
+            "type": "boolean"
+          },
+          "by": {
+            "enum": [
+              "owner",
+              "buddy"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+          }
+        }
+      }
+    },
+    "outcome": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "built": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "left_out": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        },
+        "size": {
+          "type": "string"
+        },
+        "unconfirmed_defaults": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          }
+        }
+      }
+    },
+    "accepted": {
+      "type": "object",
+      "required": [
+        "by",
+        "at"
+      ],
+      "additionalProperties": false,
+      "properties": {
+        "by": {
+          "enum": [
+            "owner"
+          ]
+        },
+        "at": {
+          "type": "string",
+          "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+        },
+        "channel": {
+          "enum": [
+            "chat",
+            "cli",
+            "view"
+          ]
+        },
+        "assurance": {
+          "enum": [
+            "recorded",
+            "signed",
+            "host"
+          ]
+        }
+      }
+    },
+    "unverified": {
+      "$comment": "screens the reviewer knew were there and could not verify, for which the owner decided nobody tries again; the check stays 'not run', never a pass",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "screen",
+          "by",
+          "at"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "screen": {
+            "type": "string",
+            "pattern": "^[a-z0-9]+(-[a-z0-9]+)*$"
+          },
+          "by": {
+            "enum": [
+              "owner"
+            ]
+          },
+          "at": {
+            "type": "string"
+          },
+          "channel": {
+            "enum": [
+              "chat",
+              "cli",
+              "view"
+            ]
+          },
+          "note": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    },
+    "howto": {
+      "$comment": "how to try each acceptance criterion, written by Dev when it delivers: what to do and what to see; the owner follows it when the milestone is reviewed",
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "criterion",
+          "steps",
+          "expect"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "criterion": {
+            "type": "string",
+            "pattern": "^AC\\d+$"
+          },
+          "steps": {
+            "type": "string",
+            "minLength": 1
+          },
+          "expect": {
+            "type": "string",
+            "minLength": 1
+          }
+        }
+      }
+    }
+  }
+}

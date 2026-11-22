@@ -1,0 +1,14 @@
+{
+  "$comment": "Front matter of docs/inputs/prototype/manifest.md (R107, R116, R126). The statements live in the body as bullets that end with an origin tag (human DATE, assumed, unknown), like the business context; they are checked by verify.mjs, not by this schema. fingerprint: of the prototype's files when the manifest was drafted, so a changed prototype is noticed. reading: present when the manifest was drafted from Buddy's reading (R131), which check verifies again against the HTML.",
+  "type": "object",
+  "required": ["schema", "title", "source", "fingerprint", "updated"],
+  "additionalProperties": false,
+  "properties": {
+    "schema": { "const": "buddy/prototype@1" },
+    "title": { "type": "string", "minLength": 1 },
+    "source": { "type": "string", "minLength": 1 },
+    "reading": { "type": "string", "minLength": 1 },
+    "fingerprint": { "type": "string", "pattern": "^[0-9a-f]{16}$" },
+    "updated": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}$" }
+  }
+}

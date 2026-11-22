@@ -1,0 +1,193 @@
+{
+  "$comment": "A batch of questions put to the human together (docs/buddy/questions/<batch>.md or docs/questions.md).",
+  "type": "object",
+  "required": [
+    "schema",
+    "id",
+    "status",
+    "round",
+    "questions"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "buddy/question-batch@0"
+    },
+    "id": {
+      "type": "string",
+      "pattern": "^B-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+    },
+    "slice": {
+      "type": "string",
+      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+    },
+    "status": {
+      "enum": [
+        "open",
+        "answered",
+        "closed"
+      ]
+    },
+    "round": {
+      "type": "integer",
+      "minimum": 1
+    },
+    "raised_by": {
+      "enum": [
+        "intake",
+        "answer-analysis",
+        "checkpoint",
+        "agent"
+      ]
+    },
+    "because": {
+      "type": "string"
+    },
+    "created": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}$"
+    },
+    "questions": {
+      "type": "array",
+      "minItems": 1,
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "situation",
+          "options",
+          "blocking",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^Q-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+          },
+          "situation": {
+            "type": "string",
+            "minLength": 1
+          },
+          "because": {
+            "type": "string"
+          },
+          "blocking": {
+            "type": "boolean"
+          },
+          "status": {
+            "enum": [
+              "open",
+              "answered",
+              "assumed",
+              "withdrawn"
+            ]
+          },
+          "recommended": {
+            "type": "string"
+          },
+          "default": {
+            "type": "string"
+          },
+          "options": {
+            "type": "array",
+            "minItems": 2,
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "label",
+                "cost"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^[a-z0-9-]+$"
+                },
+                "label": {
+                  "type": "string",
+                  "minLength": 1
+                },
+                "cost": {
+                  "type": "string",
+                  "minLength": 1
+                }
+              }
+            }
+          },
+          "answer": {
+            "type": "object",
+            "required": [
+              "by",
+              "origin",
+              "at"
+            ],
+            "additionalProperties": false,
+            "properties": {
+              "option": {
+                "type": "string"
+              },
+              "text": {
+                "type": "string"
+              },
+              "by": {
+                "enum": [
+                  "human",
+                  "agent"
+                ]
+              },
+              "origin": {
+                "enum": [
+                  "human",
+                  "delegated",
+                  "assumed"
+                ]
+              },
+              "at": {
+                "type": "string",
+                "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+              }
+            }
+          }
+        }
+      }
+    },
+    "assumed_defaults": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "text",
+          "status"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "status": {
+            "enum": [
+              "assumed",
+              "confirmed",
+              "changed"
+            ]
+          },
+          "by": {
+            "enum": [
+              "human"
+            ]
+          },
+          "at": {
+            "type": "string",
+            "pattern": "^\\d{4}-\\d{2}-\\d{2}"
+          },
+          "note": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  }
+}

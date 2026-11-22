@@ -1,0 +1,114 @@
+{
+  "$comment": "buddy/requests@1: the map of what was asked, one per project (docs/buddy/requests.md). Every requirement of the inputs (a PRD line, a prototype screen) is an item with its destination: covered by a change or milestone, excluded (by a change or milestone, or for a reason), deferred with its reason, waiting for a question; no destination means nobody has it yet. Optionally its priority, with its origin and why (R132, R136), and what it depends on (R132). Written by core/src/requests.mjs; the rules a shape cannot express are in core/src/verify.mjs.",
+  "type": "object",
+  "required": [
+    "schema",
+    "items"
+  ],
+  "additionalProperties": false,
+  "properties": {
+    "schema": {
+      "const": "buddy/requests@1"
+    },
+    "updated": {
+      "type": "string",
+      "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$"
+    },
+    "last": {
+      "$comment": "the highest id ever given, so a removed id is never given again",
+      "type": "integer",
+      "minimum": 0
+    },
+    "items": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "required": [
+          "id",
+          "text",
+          "source"
+        ],
+        "additionalProperties": false,
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^RQ[1-9]\\d*$"
+          },
+          "text": {
+            "type": "string",
+            "minLength": 1
+          },
+          "source": {
+            "type": "string",
+            "minLength": 1
+          },
+          "destination": {
+            "enum": [
+              "covered",
+              "excluded",
+              "deferred",
+              "waiting"
+            ]
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+          },
+          "reason": {
+            "type": "string",
+            "minLength": 1
+          },
+          "question": {
+            "type": "string",
+            "pattern": "^Q-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4}$"
+          },
+          "priority": {
+            "$comment": "MoSCoW (R132): Won't is not stored, it is what is excluded or deferred",
+            "enum": [
+              "must",
+              "should",
+              "could"
+            ]
+          },
+          "priority_origin": {
+            "$comment": "where the priority comes from (R136): prd, stated by the PRD; assumed, proposed by Buddy until the owner confirms it; human, the owner's word. Absent on a priority set before R136: read as human",
+            "enum": [
+              "prd",
+              "assumed",
+              "human"
+            ]
+          },
+          "priority_why": {
+            "$comment": "one line: the PRD's citation for prd, Buddy's reason for assumed, optional for human",
+            "type": "string",
+            "minLength": 1
+          },
+          "depends_on": {
+            "$comment": "the requests this one needs first: assumed when Buddy proposed it, human when the owner said or confirmed it",
+            "type": "array",
+            "items": {
+              "type": "object",
+              "required": [
+                "id",
+                "origin"
+              ],
+              "additionalProperties": false,
+              "properties": {
+                "id": {
+                  "type": "string",
+                  "pattern": "^RQ[1-9]\\d*$"
+                },
+                "origin": {
+                  "enum": [
+                    "assumed",
+                    "human"
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

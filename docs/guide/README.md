@@ -19,4 +19,4 @@ Keep these at hand:
 ## Other guides
 
 - To write a library of your own (your standards, your base application, your questions, your checklists), read the [library guide](../../core/LIBRARY-GUIDE.md). Start with the default library; write your own once you know what you want to change.
-- To explain Buddy to a Product Owner who is not a developer, share the [explainer](../explainer.html).
+- To explain Buddy to a Product Owner who is not a developer, share the [explainer](../explainer.md).

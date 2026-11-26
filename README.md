@@ -2,13 +2,15 @@
 
 **The agent knows how to program, but not your process. The library defines the process, and Buddy runs it.**
 
-Buddy is a plugin for Claude Code and for Antigravity. He is the Product Owner's companion for getting software that gives value to the business, efficiently. A coding agent will happily build what nobody asked for, skip a test, or decide something costly on its own. Buddy stands between you and the agent:
+Buddy is the Product Owner's companion for getting software that gives value to the business, efficiently. **He is a plugin built for two tools: [Claude Code](https://claude.com/claude-code) and [Antigravity](https://antigravity.google).** Install him in either one and you talk with Buddy there; the same project works in both.
 
-- with only an idea, he helps you discover the product first: research, interviews, a brief, the flows, the wireframes and a prototype tested with real users;
-- he asks first what only you know (the business, what is costly to get wrong) and never what your project already says;
-- an agent builds each change inside your project's standards;
-- programs check the work (the tests, a scan for signs of cheating) and an independent reviewer reads it;
-- you decide only what needs you: the costly questions, the assumptions, and the acceptance of each change.
+A coding agent will happily build what nobody asked for, skip a test, or decide something costly on its own. Buddy stands between you and the agent:
+
+- **With only an idea,** he helps you discover the product first: research, interviews, a brief, the flows, the wireframes and a prototype tested with real users.
+- **He asks first what only you know** (the business, what is costly to get wrong) and never what your project already says.
+- **An agent builds each change** inside your project's standards.
+- **Programs check the work** (the tests, a scan for signs of cheating) and **an independent reviewer reads it.**
+- **You decide only what needs you:** the costly questions, the assumptions, and the acceptance of each change.
 
 The process itself (the standards, the base application, the questions, the checklists) comes from a **library**, a git repository. Buddy brings a default one; you can write your own.
 
@@ -20,7 +22,11 @@ The process itself (the standards, the base application, the questions, the chec
 
 ## A first start
 
-You need Claude Code or Antigravity, Node 22 or later and git. The lines below are for Claude Code; Antigravity is further down. In an empty folder:
+You need Node 22 or later, git, and one of the two tools below, signed in. Pick yours; the rest of the project is the same either way.
+
+### With Claude Code
+
+In an empty folder:
 
 ```bash
 mkdir my-project
@@ -30,21 +36,33 @@ claude plugin install buddy@buddy --scope local
 claude
 ```
 
-**Panel beside the conversation (Claude Code, optional).** A second plugin of the same catalogue shows what waits for you, what Buddy is building and what comes next, and reads the board through Buddy's program: `claude plugin install buddy-panel@buddy`, after the marketplace above is added. It is installed on the machine, not in your project, and nothing in the project is configured. It shows the project the conversation is in, also when the conversation's folder is one inside it (the nearest folder up holding `docs/buddy`). The panel speaks English; `buddy tools language es` (kept in your machine's Buddy setting, never in a project) switches it to Spanish.
+Optional: a panel beside the conversation that shows what waits for you, what Buddy is building and what comes next: `claude plugin install buddy-panel@buddy`. It is installed on the machine, not in your project.
 
-**Panel beside the conversation (Antigravity App, optional).** The same short view as a plugin of its own, shown in the App's side panel: `agy plugin install <path to this repository>/panel/antigravity` (nothing else to install; after installing a new version, quit and reopen Antigravity, since the running panel stays in memory); open it from the side panel's `+` menu or Overview → Plugins, then "Buddy panel". It follows the same language setting, and reads the board with the Buddy installed in Antigravity (Claude Code's only when that one is missing), as Claude Code's panel does with Claude Code's. When Buddy finds a tool without its panel, he tells you once how to install it.
+### With Antigravity
 
-Then say: *"Start a new project here."* Buddy asks a few questions, creates the project from the default library and asks about the business. With a PRD or a prototype, put it in the folder first; with only an idea, he offers [discovery](docs/guide/discovery.md). To watch the work, ask for the board's page: it refreshes itself in your browser. [Getting started](docs/guide/getting-started.md) has the details, the prerequisites and the path to your first accepted change.
+Install the plugin once for the whole machine (there is no per-folder scope), then start `agy`, Antigravity App or Antigravity IDE in an empty project folder:
 
-**With Antigravity.** Install the plugin once with `agy plugin install https://github.com/teban1812/buddy`: it installs for the whole machine (`~/.gemini/config/plugins/`), so the same install serves the `agy` command line, Antigravity App and Antigravity IDE (pinning a version was not tried, so you get what the repository holds). Where Antigravity keeps the plugin, the plugin's variable arrives empty, so Buddy's program is run as `node "$(command -v buddy.mjs)" <command>`. Each environment keeps its own tool and model settings (`buddy tools`); the guide's [getting started](docs/guide/getting-started.md#with-antigravity) says how. Tried end to end on macOS: `agy` 1.5.14, Antigravity App 2.34.0 and Antigravity IDE 2.7.0; the Antigravity extension for other editors was not tried. The guide keeps [a table of what was tried](docs/guide/getting-started.md#what-was-tried-per-tool-and-version), per tool, surface and version.
+```text
+agy plugin install https://github.com/teban1812/buddy
+```
+
+It serves the three: the `agy` command line, the App and the IDE. Tried end to end on macOS with `agy` 1.5.14, Antigravity App 2.34.0 and Antigravity IDE 2.7.0; the extension for other editors was not tried. [Getting started](docs/guide/getting-started.md#with-antigravity) has the details and the table of what was tried.
+
+Optional, for the App: the same short panel as a plugin of its own, `agy plugin install <path to this repository>/panel/antigravity`. After a new version, quit and reopen Antigravity.
+
+### Then
+
+Say: *"Start a new project here."* Buddy asks a few questions, creates the project from the default library and asks about the business. With a PRD or a prototype, put it in the folder first; with only an idea, he offers [discovery](docs/guide/discovery.md). To watch the work, ask for the board's page: it refreshes itself in your browser. [Getting started](docs/guide/getting-started.md) has the prerequisites and the path to your first accepted change.
+
+Each environment keeps its own tool and model settings (`buddy tools`), and the panels speak English: `buddy tools language es` switches them to Spanish.
 
 ## The guides
 
 | You are | Read |
 | :-- | :-- |
+| a Product Owner who wants to understand Buddy | [the explainer](docs/explainer.md) |
 | a developer who uses Buddy | [the developer's guide](docs/guide/README.md) |
 | designing a library for your process | [the library guide](core/LIBRARY-GUIDE.md) |
-| a Product Owner who wants to understand Buddy | [the explainer](docs/explainer.html) |
 
 What each version brings is in the [changelog](CHANGELOG.md).
 

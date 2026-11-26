@@ -333,8 +333,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
       <p class="lede" lang="en">Buddy is a plugin for Claude Code and Antigravity that helps you build and maintain software that delivers real value to your business, without waste. He asks you first about what only you know, lets automated checks and an independent reviewer verify the work, and <span class="hl">brings you only the decisions that are yours to make</span>.</p>
       <p class="muted" lang="es">Y no olvida nada de lo que pediste: cada pedido queda construido, excluido o diferido a la vista. La meta es que gastes tus minutos solo en lo que es tuyo, sin la duda de si el trabajo avanza o de si es el trabajo correcto.</p>
       <p class="muted" lang="en">And he never loses track of what you ask for: every request ends up built, explicitly excluded or openly deferred. The point is that you spend your time only on what needs you, without wondering whether the work is moving or whether it is the right work.</p>
-      <span class="tag" lang="es">versión <b>0.4.0</b> disponible, probada en dos proyectos reales · Windows, macOS y Linux</span>
-      <span class="tag" lang="en">version <b>0.4.0</b> available, tested on two real projects · Windows, macOS and Linux</span>
+      <span class="tag" lang="es">versión <b>0.5.0</b> disponible, probada en proyectos reales · Windows, macOS y Linux</span>
+      <span class="tag" lang="en">version <b>0.5.0</b> available, tested on real projects · Windows, macOS and Linux</span>
     </div>
 
     <figure class="card" lang="es" aria-label="Ejemplo de una pregunta de Buddy">
@@ -858,8 +858,8 @@ mkdir -p ~/Dev/my-project && cd ~/Dev/my-project
 claude plugin marketplace add teban1812/buddy --scope local
 <span class="c"># Install Buddy from that marketplace, for this project only</span>
 claude plugin install buddy@buddy --scope local</pre>
-          <p class="where" lang="es"><b>Otras formas</b>: para quedarte en una versión exacta que nunca cambie, agrega su etiqueta después de un <code>#</code> (por ejemplo <code>teban1812/buddy#v0.4.0</code>).</p>
-          <p class="where" lang="en"><b>Other options</b>: to stay on an exact version that never changes, add its tag after a <code>#</code> (for example <code>teban1812/buddy#v0.4.0</code>).</p>
+          <p class="where" lang="es"><b>Otras formas</b>: para quedarte en una versión exacta que nunca cambie, agrega su etiqueta después de un <code>#</code> (por ejemplo <code>teban1812/buddy#v0.5.0</code>).</p>
+          <p class="where" lang="en"><b>Other options</b>: to stay on an exact version that never changes, add its tag after a <code>#</code> (for example <code>teban1812/buddy#v0.5.0</code>).</p>
           <p class="where" lang="es"><b>Para comprobarlo</b>: <span class="only-cli"><code>claude plugin list</code> muestra <code>buddy</code> con su versión.</span><span class="only-desk">en la app, el botón + junto a la caja de texto, luego Plugins, lista <code>buddy</code>.</span></p>
           <p class="where" lang="en"><b>To confirm</b>: <span class="only-cli"><code>claude plugin list</code> shows <code>buddy</code> and its version.</span><span class="only-desk">in the app, click the + button next to the message box, then Plugins; <code>buddy</code> is listed there.</span></p>
         </div>
@@ -1147,8 +1147,8 @@ claude plugin update buddy@buddy</pre>
 claude plugin marketplace update buddy
 <span class="c"># Install the new version of Buddy if there is one; it takes effect next session</span>
 claude plugin update buddy@buddy</pre>
-          <p class="where" lang="es">Si fijaste una versión exacta, para pasar a otra quita el catálogo y vuelve a agregarlo con la etiqueta nueva (<code>claude plugin marketplace remove buddy</code> y luego <code>add</code> con <code>#v0.4.0</code>, por ejemplo).</p>
-          <p class="where" lang="en">If you pinned an exact version, to move to another one remove the marketplace and add it again with the new tag (<code>claude plugin marketplace remove buddy</code>, then <code>add</code> with <code>#v0.4.0</code>, for example).</p>
+          <p class="where" lang="es">Si fijaste una versión exacta, para pasar a otra quita el catálogo y vuelve a agregarlo con la etiqueta nueva (<code>claude plugin marketplace remove buddy</code> y luego <code>add</code> con <code>#v0.5.0</code>, por ejemplo).</p>
+          <p class="where" lang="en">If you pinned an exact version, to move to another one remove the marketplace and add it again with the new tag (<code>claude plugin marketplace remove buddy</code>, then <code>add</code> with <code>#v0.5.0</code>, for example).</p>
           <p class="where" lang="es">Tu proyecto no pierde nada: lo que Buddy sabe de él vive en sus archivos markdown y en git, no en el plugin.</p>
           <p class="where" lang="en">Your project loses nothing: what Buddy knows about it lives in its markdown files and in git, not in the plugin.</p>
         </div>

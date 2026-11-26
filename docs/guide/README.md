@@ -6,8 +6,9 @@ Read them in this order the first time:
 
 1. [Overview](overview.md): the mental model in one page. What a milestone, a change and a checkpoint are, and who does what.
 2. [Getting started](getting-started.md): install Buddy, start a first project from the default library, and take a first change to acceptance.
-3. [Working alone](working-alone.md): the decisions only you take, what to do when the checkpoint stops you, the audits you can ask for, and work outside a change.
-4. [Feedback](feedback.md): how to tell the author what got in the way.
+3. [Discovery](discovery.md): when you have an idea but no PRD and no prototype, how Buddy helps you research, write the brief, draw the flows and wireframes, and build and test a prototype, step by step.
+4. [Working alone](working-alone.md): the decisions only you take, what to do when the checkpoint stops you, the audits you can ask for, and work outside a change.
+5. [Feedback](feedback.md): how to tell the author what got in the way.
 
 Keep these at hand:
 

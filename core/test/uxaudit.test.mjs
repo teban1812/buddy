@@ -20,14 +20,14 @@ const files = dir => fs.readdirSync(dir, { withFileTypes: true }).flatMap(e => e
 
 test('AC1: the usability audit ships as a skill of the plugin, for the prototype before its manifest is confirmed, one change, or the whole app', () => {
   const d = parseDocument(skill); assert.ok(!d.error, d.error); assert.equal(d.data.name, 'ux-audit');
-  assert.match(d.data.description, /of the prototype before the owner confirms its manifest, of one change, or of the whole app/); assert.match(d.data.description, /Never a stage of the cycle/);
+  assert.match(d.data.description, /of the prototype before the owner confirms its manifest, of one change, or of the whole app/); assert.match(d.data.description, /A fixed step only on the prototype/); assert.match(d.data.description, /on a change or the app, never a stage of the cycle/);
   assert.deepEqual(refs, ['accessibility.md', 'heuristics.md', 'report-format.md']);
   for (const r of refs) assert.ok(skill.includes(`references/${r}`), r);   // each reference is named where it is needed, and read only then
   for (const shared of ['independence.md', 'safe-environment.md']) {   // shared with the QA audit, not copied
     assert.ok(skill.includes(`../qa-audit/references/${shared}`), shared); assert.ok(fs.existsSync(path.join(CORE, 'skills', 'qa-audit', 'references', shared)), shared);
   }
   for (const must of ['**The prototype, before the owner confirms its manifest.**', '**One change**', '**The whole app**', 'never in parallel', 'docs/inputs/prototype/manifest.md', 'buddy prototype facts', 'buddy prototype draft', 'docs/standards/normative.md', 'never fetch a link', 'WCAG 2.2 Level AA', 'ISO 9241-110', '**Never fix built code during the audit**', 'buddy requests add', 'only when the owner agrees']) assert.ok(skill.includes(must), must);
-  for (const must of ['docs/inputs/prototype/ux-audit.md', 'qa/ux-report.md', 'docs/qa/ux-app.md']) assert.ok(read('report-format.md').includes(must), must);
+  for (const must of ['docs/discovery/ux-audit.md', 'qa/ux-report.md', 'docs/qa/ux-app.md']) assert.ok(read('report-format.md').includes(must), must);
 });
 test('AC2: every finding names what it breaks and its cost to the user, and the prototype audit says which fixes are free and which cost built work', () => {
   assert.match(skill, /\*\*every finding names the criterion or principle it breaks and its cost to the user\*\*/);
@@ -55,12 +55,13 @@ test('a report beside the prototype leaves its manifest alone, and one in a chan
   const q = path.join(changeDirOf(d, c.id), 'qa'); fs.mkdirSync(q); fs.writeFileSync(path.join(q, 'ux-report.md'), '# Usability audit: Save books\n\nNo front matter here.\n');
   assert.deepEqual(listSlices(d).map(s => s.data.id), [c.id]);
 });
-test('Buddy offers the usability audit on demand, and the prototype audit before the manifest is confirmed, never as a stage', () => {
+test('Buddy offers the usability audit on demand for a change or the app, and runs it as a fixed step on the prototype, never as a stage otherwise', () => {
   const at = buddy.indexOf('**Usability audit, on demand.**'); assert.ok(at > 0);
   const line = buddy.slice(at, buddy.indexOf('\n', at));
-  for (const must of ['`ux-audit` skill', 'never a stage of the cycle', 'do not run it unasked', 'only when the owner agrees']) assert.ok(line.includes(must), must);
+  for (const must of ['`ux-audit` skill', 'never a stage of the cycle for a change or the app', 'do not run it unasked there', 'a fixed step, run by the `discover` and `intake` skills', 'only when the owner agrees']) assert.ok(line.includes(must), must);
   const intake = fs.readFileSync(path.join(CORE, 'skills', 'intake', 'SKILL.md'), 'utf8');   // reading and confirming the prototype live in the intake skill
   const confirm = intake.slice(intake.indexOf('2. **Have the owner confirm it, line by line**'));
-  assert.match(confirm, /Before they confirm, offer once the prototype audit of the `ux-audit` skill/); assert.match(confirm, /never required/);
-  assert.ok(confirm.indexOf('ux-audit') < confirm.indexOf('prototype confirm --all'), 'offered before the manifest is confirmed');
+  assert.match(confirm, /Before they confirm, run the prototype audit of the `ux-audit` skill/); assert.match(confirm, /nothing changes until they accept/);
+  assert.ok(confirm.indexOf('ux-audit') < confirm.indexOf('prototype confirm --all'), 'run before the manifest is confirmed');
+  assert.match(skill, /`discover` runs it before the test with users, `intake` before a handed-over manifest is confirmed/);
 });

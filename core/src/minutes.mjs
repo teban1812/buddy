@@ -88,6 +88,42 @@ export function ownerMinutes(repo, { since, only, index } = {}) {
   return { since: since ?? null, changes: listed.map(c => ({ ...c, events: c.events.map(clean) })), milestones: groups };
 }
 
+// How long each change was in each stage, in calendar minutes, from the dates its records hold (live-board AC2): the status of a change and of its
+// pieces at each commit that touched them (one `git log` for all of them, so it stays cheap), and the status now from the record, at its `updated`
+// when that is not committed yet. A change built in pieces is in the stage of its pieces (building if any is, else waiting for the owner if any is
+// delivered, else ready, else being defined); accepted and abandoned end the count. { [change id]: { refining, ready, building, delivered } }.
+const STAGE = { refining: 'refining', ready: 'ready', building: 'building', blocked: 'building', rework: 'building', delivered: 'delivered' };
+export function stageTimes(repo, now, { index } = {}) {
+  const x = index ?? readIndex(repo); const ev = new Map(); let t = null; let cur = null; let from = null;
+  const out = git(['-c', 'core.quotePath=false', 'log', '--reverse', '--format=C %cI', '-G^status: ', '-p', '-U0', '-M', '--', 'docs/buddy'], repo);
+  for (const l of out.split('\n')) {
+    if (l.startsWith('C ')) t = ms(l.slice(2));
+    else if (l.startsWith('rename from ')) from = l.slice(12);
+    else if (l.startsWith('rename to ')) { const to = l.slice(10); if (from && ev.has(from)) { ev.set(to, [...(ev.get(to) || []), ...ev.get(from)]); ev.delete(from); } from = null; }
+    else if (l.startsWith('+++ ')) cur = l.startsWith('+++ b/') ? l.slice(6) : null;
+    else if (cur && t != null && l.startsWith('+status: ')) ev.set(cur, [...(ev.get(cur) || []), [t, l.slice(9).trim()]]);
+  }
+  const recs = x.changes; const end = ms(now); const result = {};
+  const line = r => {
+    const e = (ev.get(r.file) || []).filter((v, i, a) => !i || a[i - 1][1] !== v[1]); const status = r.data.status; const last = e[e.length - 1];
+    const created = ms(r.data.created); if (e.length && created != null && created < e[0][0]) e[0] = [created, e[0][1]];
+    if (!last || last[1] !== status) { const at = ms(last ? r.data.updated : r.data.created ?? r.data.updated); if (at != null && (!last || at > last[0])) e.push([at, status]); }
+    return e;
+  };
+  for (const c of recs.filter(r => !r.change)) {
+    const parts = recs.filter(p => p.change === c.data.id); const lines = [[c, line(c)], ...parts.map(p => [p, line(p)])];
+    const steps = lines.flatMap(([r, e]) => e.map(([at, st]) => ({ at, id: r.data.id, st }))).sort((a, b) => a.at - b.at);
+    const state = new Map(); const sum = { refining: 0, ready: 0, building: 0, delivered: 0 }; let was = null; let since = null;
+    const stage = () => { const own = parts.some(p => state.has(p.data.id)) ? parts.filter(p => state.has(p.data.id)).map(p => state.get(p.data.id)) : [state.get(c.data.id)];
+      if (own.every(v => v === 'accepted' || v === 'abandoned')) return null; return ['building', 'delivered', 'ready'].find(k => own.some(v => STAGE[v] === k)) ?? 'refining'; };
+    const close = at => { if (was && since != null && at > since) sum[was] += Math.floor((at - since) / 60000); };
+    for (const s of steps) { close(s.at); state.set(s.id, s.st); was = stage(); since = s.at; }
+    if (end != null) close(end);
+    result[c.data.id] = sum;
+  }
+  return result;
+}
+
 // "2 d 3 h", "5 h 20 min", "12 min".
 export function span(min) {
   const d = Math.floor(min / 1440); const h = Math.floor((min % 1440) / 60); const m = min % 60;

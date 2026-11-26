@@ -1,88 +1,15 @@
-// The prototype as a first-class artifact (R107, R116, R126): this file reads an HTML prototype into its structure with a program that
-// needs no model and no dependency: screens, the flows between them, controls, copy, and what does nothing; and lists its facts without deciding
-// (R131), for Buddy's own reading. The manifest (draft, confirm, check, add), built on either reading, is in the same module further down.
+// The prototype as a first-class artifact (R107, R116, R126): this file lists the facts of an HTML prototype without deciding (R131), for Buddy's own
+// reading (the agent's, checked against the HTML here). The manifest (draft, confirm, check, add), built on that reading, is in the same module further down.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
 import { parseHtml, walk, textOf, find } from './htmlscan.mjs';
 
 export const PROTOTYPE_DIR = 'docs/inputs/prototype';
-const slug = s => String(s ?? '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40).replace(/-+$/, '');
-const human = s => String(s ?? '').replace(/[-_]+/g, ' ').trim();
 const short = (s, n = 100) => (s.length > n ? s.slice(0, n - 1).trimEnd() + '…' : s);
-const TARGET_ATTRS = ['data-target', 'data-screen', 'data-goto', 'data-view', 'data-page', 'data-buddy-goto'];
-const FAKE_TEXT = /lorem ipsum|john doe|jane doe|example\.(com|org)|555-01\d\d|foo@bar/i;
-const NOWHERE = /^(#|javascript:\s*(void\(0\))?;?\s*)?$/i;
-
-// What an element points at: an id on the same page, or another HTML file. `weak` marks a guess from a quoted word in an onclick.
-function targetsOf(el) {
-  const t = []; const href = el.attrs.href;
-  if (href !== undefined) {
-    if (href.startsWith('#') && href.length > 1) t.push({ id: href.slice(1) });
-    else if (/\.html?(#.*)?$/i.test(href) && !/^[a-z][a-z0-9+.-]*:/i.test(href)) t.push({ file: path.posix.basename(href.split('#')[0]) });
-  }
-  for (const a of TARGET_ATTRS) if (el.attrs[a]) t.push({ id: el.attrs[a].replace(/^#/, '') });
-  if (el.attrs.onclick) for (const m of el.attrs.onclick.matchAll(/['"]#?([A-Za-z0-9_-]+)['"]/g)) t.push({ id: m[1], weak: true });
-  return t;
-}
 const isClickable = el => el.tag === 'button' || (el.tag === 'a' && 'href' in el.attrs) || el.attrs.role === 'button' || (el.tag === 'input' && ['button', 'submit', 'reset'].includes((el.attrs.type || '').toLowerCase()));
 const isField = el => ['input', 'select', 'textarea'].includes(el.tag) && !['button', 'submit', 'reset', 'hidden', 'image'].includes((el.attrs.type || 'text').toLowerCase());
 
-// files: [{ name, html }], name relative to the prototype folder. Returns { files, fingerprint, scripts, screens, flows }.
-export function readPrototype(files) {
-  const parsed = files.map(f => ({ ...f, ...parseHtml(f.html) }));
-  const used = new Set(); const unique = base => { let n = base || 'screen'; let k = 2; while (used.has(n)) n = `${base}-${k++}`; used.add(n); return n; };
-  const screens = [];
-  for (const f of parsed) {
-    const ids = new Map(); walk(f.root, el => { if (el.attrs.id && !ids.has(el.attrs.id)) ids.set(el.attrs.id, el); });
-    let picks = find(f.root, el => el.attrs['data-buddy-screen'] !== undefined);
-    if (!picks.length) { const ref = new Set(); walk(f.root, el => { for (const t of targetsOf(el)) if (t.id && ids.has(t.id)) ref.add(t.id); }); picks = find(f.root, el => el.attrs.id && ref.has(el.attrs.id)); }
-    const base = path.posix.basename(f.name).replace(/\.html?$/i, ''); let fileScreen = false;
-    if (!picks.length) { picks = [find(f.root, el => el.tag === 'body')[0] ?? f.root]; fileScreen = true; }
-    for (const el of picks) {
-      const heading = find(el, h => /^h[1-3]$/.test(h.tag))[0]; const title = (heading ? textOf(heading) : '') || el.attrs['aria-label'] || el.attrs['data-title'] || human(el.attrs.id) || human(base);
-      const given = el.attrs['data-buddy-screen'];
-      const name = unique(slug(given) || (fileScreen ? (base === 'index' ? 'home' : slug(base)) : slug(el.attrs.id) || slug(title)));
-      screens.push({ name, title: short(title, 80), file: f.name, id: el.attrs.id ?? null, el, fileScreen, ids, scripts: f.scripts, explicit: !!given });
-    }
-  }
-  const owners = new Set(screens.map(s => s.el));
-  const labels = new Map(); for (const f of parsed) walk(f.root, el => { if (el.tag === 'label' && el.attrs.for) labels.set(`${f.name}#${el.attrs.for}`, textOf(el)); });
-  const out = [];
-  for (const s of screens) {
-    const controls = []; const copy = []; const zones = []; const fake = []; const unread = []; let wholeFake = 'data-buddy-fake' in s.el.attrs;
-    const visit = (n, root) => {
-      if (n.text !== undefined) { if (FAKE_TEXT.test(n.text)) fake.push(`placeholder text: "${short(n.text.trim(), 50)}"`); return; }
-      if (!root && owners.has(n)) return;
-      const label = () => textOf(n) || n.attrs['aria-label'] || n.attrs.value || n.attrs.title || n.attrs.placeholder || n.attrs.name || '(no label)';
-      if (/^h[1-4]$/.test(n.tag) || n.tag === 'p') { const t = textOf(n); if (t && copy.length < 8 && !copy.includes(short(t))) copy.push(short(t)); }
-      if (n.attrs['data-buddy-zone']) zones.push({ zone: n.attrs['data-buddy-zone'], text: short(label(), 60) });
-      if (!root && 'data-buddy-fake' in n.attrs) fake.push(`marked fake: ${short(label(), 60)}`);
-      if (isClickable(n)) {
-        const targets = targetsOf(n); const lab = short(label(), 60); controls.push({ kind: n.tag === 'a' ? 'link' : 'button', label: lab, targets });
-        // a # link that carries a data-* attribute or an onclick, on a page with scripts, is navigation the program cannot follow, not a dead link
-        if (n.tag === 'a' && NOWHERE.test(n.attrs.href ?? '')) { if (s.scripts && (n.attrs.onclick || Object.keys(n.attrs).some(k => k.startsWith('data-') && !k.startsWith('data-buddy-')))) unread.push(`navigation by script, not read: link "${lab}"`); else fake.push(`goes nowhere: link "${lab}"`); }
-      } else if (isField(n)) {
-        controls.push({ kind: 'field', label: short(labels.get(`${s.file}#${n.attrs.id}`) || n.attrs['aria-label'] || n.attrs.placeholder || n.attrs.name || '(no label)', 60), type: n.tag === 'input' ? (n.attrs.type || 'text') : n.tag });
-      } else if (n.tag === 'form' && !('action' in n.attrs) && !s.scripts) fake.push('a form with no action and no script: submitting it does nothing');
-      for (const c of n.children) visit(c, false);
-    };
-    visit(s.el, true);
-    out.push({ name: s.name, title: s.title, file: s.file, id: s.id, controls: controls.slice(0, 40), copy, zones, fake: [...new Set(fake)].slice(0, 12), unread: [...new Set(unread)].slice(0, 12), fake_screen: wholeFake, explicit: s.explicit });
-  }
-  const byId = (id, file) => screens.find(x => x.id === id && x.file === file) ?? screens.find(x => x.id === id);
-  const byFile = file => screens.find(x => path.posix.basename(x.file) === file && x.fileScreen) ?? screens.find(x => path.posix.basename(x.file) === file);
-  const flows = []; const seen = new Set();
-  screens.forEach((s, k) => {
-    for (const c of out[k].controls) for (const t of c.targets || []) {
-      const to = t.id ? byId(t.id, s.file) : t.file ? byFile(t.file) : null;
-      if (!to || to.name === s.name) continue;
-      const key = `${s.name}>${to.name}>${c.label}`; if (!seen.has(key)) { seen.add(key); flows.push({ from: s.name, to: to.name, via: c.label, weak: !!t.weak }); }
-    }
-  });
-  for (const s of out) for (const c of s.controls) delete c.targets;
-  return { files: files.map(f => ({ name: f.name, bytes: Buffer.byteLength(f.html) })), fingerprint: fingerprintOf(files), scripts: parsed.some(f => f.scripts), screens: out, flows };
-}
 const fingerprintOf = files => crypto.createHash('sha256').update([...files].sort((a, b) => a.name.localeCompare(b.name)).map(f => `${f.name}\0${f.html}\0`).join('')).digest('hex').slice(0, 16);
 
 // The facts of a prototype, without deciding what is a screen (R131): per file its ids, links, buttons, headings, forms and the names of the
@@ -139,21 +66,14 @@ export function statementsOf(p) {
   const out = []; const add = (section, key, text) => out.push({ section, key, text });
   const mark = x => (x.problem ? ` (not backed by the prototype: ${x.problem})` : '');
   for (const s of p.screens) {
-    const by = k => s.controls.filter(c => c.kind === k).map(c => `"${c.label}"`);
-    const parts = s.evidence ? (s.evidence.length ? [`from: ${s.evidence.map(e => short(e, 60)).join('; ')}`] : []) : [['fields', by('field')], ['buttons', by('button')], ['links', by('link')]].filter(([, v]) => v.length).map(([k, v]) => `${k}: ${list(v)}`);
+    const parts = s.evidence?.length ? [`from: ${s.evidence.map(e => short(e, 60)).join('; ')}`] : [];
     add(SECTIONS.screens, `screen:${s.name}`, `\`${s.name}\` ${s.title} (${s.file})${parts.length ? ` — ${parts.join('; ')}` : ''}${mark(s)}`);
   }
-  for (const f of p.flows) add(SECTIONS.flows, `flow:${f.from}>${f.to}:${f.via}`, `\`${f.from}\` to \`${f.to}\` through "${f.via}"${f.weak ? ' (a guess from the page\'s script)' : ''}${mark(f)}`);
+  for (const f of p.flows) add(SECTIONS.flows, `flow:${f.from}>${f.to}:${f.via}`, `\`${f.from}\` to \`${f.to}\` through "${f.via}"${mark(f)}`);
   for (const s of p.screens) {
-    if (s.fake_screen) add(SECTIONS.fake, `fake:${s.name}:the whole screen`, `\`${s.name}\`: the whole screen is marked fake`);
     for (const f of s.fake) add(SECTIONS.fake, `fake:${s.name}:${f}`, `\`${s.name}\`: ${f}`);
-    for (const z of s.zones) {
-      if (z.zone === 'fixed') add(SECTIONS.fixed, `fixed:${s.name}:${z.text}`, `\`${s.name}\`: ${z.text} (fixed)`);
-      else if (z.zone === 'illustrative') add(SECTIONS.fake, `fake:${s.name}:illustrative ${z.text}`, `\`${s.name}\`: illustrative, free to change: ${z.text}`);
-    }
+    for (const z of s.fixed || []) add(SECTIONS.fixed, `fixed:${s.name}:${z}`, `\`${s.name}\`: ${z} (fixed)`);
   }
-  if (p.scripts) add(SECTIONS.notes, 'note:scripts', 'The prototype has scripts: Buddy read its markup, not its behaviour, so a flow that only a script makes may be missing.');
-  for (const s of p.screens) for (const u of s.unread || []) add(SECTIONS.notes, `note:${s.name}:${u}`, `\`${s.name}\`: ${u}`);
   for (const n of p.notes || []) add(SECTIONS.notes, keyOfStatement(SECTIONS.notes, n), n);
   return out;
 }
@@ -224,13 +144,13 @@ export function fromReading(r, files) {
   const screens = r.screens.map(s => {
     const file = fileOf(s.file); const problem = judge(file, s.evidence); if (problem) problems.push(`screen \`${s.name}\`: ${problem}`);
     const fake = (r.fake || []).filter(f => f.screen === s.name).map(f => squash(f.text));
-    return { name: s.name, title: short(squash(s.title), 80), file, evidence: (s.evidence || []).map(squash).filter(Boolean), problem, controls: [], copy: [], zones: [], fake, unread: [], fake_screen: false };
+    return { name: s.name, title: short(squash(s.title), 80), file, evidence: (s.evidence || []).map(squash).filter(Boolean), problem, fake, fixed: fixedZones(files.find(x => x.name === file)?.html, s.evidence) };
   });
   const flows = (r.flows || []).map(f => {
     const from = screens.find(s => s.name === f.from); const problem = judge(from.file, f.evidence); if (problem) problems.push(`flow \`${f.from}\` to \`${f.to}\`: ${problem}`);
-    return { from: f.from, to: f.to, via: squash(f.via), weak: false, evidence: (f.evidence || []).map(squash).filter(Boolean), problem };
+    return { from: f.from, to: f.to, via: squash(f.via), evidence: (f.evidence || []).map(squash).filter(Boolean), problem };
   });
-  return { fingerprint: fingerprintOf(files), reading: true, scripts: false, screens, flows, notes: (r.notes || []).map(squash).filter(Boolean), problems };
+  return { fingerprint: fingerprintOf(files), reading: true, screens, flows, notes: (r.notes || []).map(squash).filter(Boolean), problems };
 }
 
 const tag = o => (o.origin === 'human' ? `\`human ${o.date}\`` : o.origin === 'unknown' ? '`unknown`' : '`assumed`');
@@ -258,7 +178,7 @@ export function draftManifest(p, { title = 'Prototype manifest', existing = null
   }
   // the origin tag stays last on its line; a line already moved keeps its note and is not annotated again
   if (gone.length) { lines.push(`## ${SECTIONS.gone}`, ...gone.map(g => `- ${g.section === SECTIONS.gone ? g.text : `${g.text} (was under: ${g.section})`} ${tag(g)}`), ''); }
-  return dumpDocument({ schema: 'buddy/prototype@1', title, source: PROTOTYPE_DIR, ...(p.reading ? { reading: READING } : {}), fingerprint: p.fingerprint, updated: date }, lines.join('\n'));
+  return dumpDocument({ schema: 'buddy/prototype@1', title, source: PROTOTYPE_DIR, reading: READING, fingerprint: p.fingerprint, updated: date }, lines.join('\n'));
 }
 
 export function readManifest(file) {
@@ -297,7 +217,7 @@ export function manifestProblems(repo) {
   // a manifest drafted from Buddy's reading: the reading is checked again against the HTML as it is now
   if (m.data.reading) {
     const r = loadReading(repo); const again = 'correct it and run `buddy prototype draft --reading` again';
-    if (!r) problems.push(`the manifest was drafted from ${READING}, which is gone: write it again, or run \`buddy prototype draft\` without --reading`);
+    if (!r) problems.push(`the manifest was drafted from ${READING}, which is gone: write it again (\`buddy prototype facts\` first), then run \`buddy prototype draft --reading\``);
     else if (r.errors.length) problems.push(...r.errors.map(e => `${READING}: ${e}: ${again}`));
     else problems.push(...fromReading(r.reading, files).problems.map(e => `${READING}: ${e}: ${again}`));
   }
@@ -336,10 +256,26 @@ export function manifestCard(m) {
 // markup holds that evidence (whitespace squashed as the reading's check does), in the order of the file, the ones inside another left out.
 // At most `cap` characters; a longer one is cut and says so. -> { html, total, cut } or null when no evidence is found in the file.
 export const FRAGMENT_CAP = 4000;
-export function fragmentOf(html, evidence, { cap = FRAGMENT_CAP, file = '' } = {}) {
+const flatten = html => {
   let flat = ''; const at = []; let space = false;
   for (let k = 0; k < html.length; k++) { if (/\s/.test(html[k])) { if (!space) { flat += ' '; at.push(k); } space = true; } else { flat += html[k]; at.push(k); space = false; } }
   const { root } = parseHtml(html); const els = []; walk(root, el => { if (el !== root) els.push(el); });
+  return { flat, at, root, els };
+};
+// What the owner fixed in a screen (`data-buddy-zone="fixed"`): the texts of those elements inside the region the screen's evidence sits in, the nearest
+// element around it that carries `data-buddy-screen`, else an `id`, else the whole file.
+function fixedZones(html, evidence) {
+  if (!html) return []; const { flat, at, root, els } = flatten(html); const out = [];
+  for (const e of (evidence || []).map(squash).filter(Boolean)) {
+    const i = flat.indexOf(e); if (i < 0) continue; const a = at[i], b = at[i + e.length - 1] + 1;
+    const around = els.filter(x => x.start <= a && x.end >= b).sort((x, y) => (x.end - x.start) - (y.end - y.start));
+    const region = around.find(x => x.attrs['data-buddy-screen'] !== undefined) ?? around.find(x => x.attrs.id) ?? root;
+    walk(region, el => { if (el.attrs['data-buddy-zone'] === 'fixed') { const t = short(textOf(el) || el.attrs['aria-label'] || el.attrs.value || el.attrs.title || el.attrs.placeholder || el.attrs.name || '(no label)', 60); if (!out.includes(t)) out.push(t); } });
+  }
+  return out;
+}
+export function fragmentOf(html, evidence, { cap = FRAGMENT_CAP, file = '' } = {}) {
+  const { flat, at, els } = flatten(html);
   const picked = []; const all = (evidence || []).map(squash).filter(Boolean); const share = Math.floor(cap / Math.max(1, all.length));   // each piece of evidence gets its part
   for (const e of all) {
     const i = flat.indexOf(e); if (i < 0) continue; const a = at[i], b = at[i + e.length - 1] + 1;
@@ -383,34 +319,29 @@ function blockEnd(s, i, hi) {
 }
 
 // The screens a change covers, as ONE text that Dev and the reviewer both receive (R119: the same inputs, by file and never by paraphrase):
-// what the owner confirmed in the manifest, then what Buddy's reading (when there is a usable one) or else the program reads in the HTML for
-// that screen. `files` is where Dev finds the originals.
+// what the owner confirmed in the manifest, then what Buddy's reading says of that screen (checked against the HTML) with the screen's own HTML.
+// Without a usable reading the brief names the manifest and says so. `files` is where Dev finds the originals.
 export function screensBrief(repo, names) {
   if (!names || !names.length) return null;
   const mf = path.join(repo, MANIFEST); const manifest = fs.existsSync(mf) ? readManifest(mf) : null;
-  const files = prototypeFiles(repo); const det = files.length ? readPrototype(files) : null;
-  const r = files.length ? loadReading(repo) : null; const p = r && !r.errors.length ? fromReading(r.reading, files) : det;
+  const files = prototypeFiles(repo); const r = files.length ? loadReading(repo) : null; const p = r && !r.errors.length ? fromReading(r.reading, files) : null;
+  const lack = !files.length ? 'no HTML in the prototype folder' : !r ? `${READING} is missing: write it (buddy prototype facts, then buddy prototype draft --reading)` : r.errors.length ? `${READING} is not usable: ${r.errors.join('; ')}` : 'not found in the prototype folder now';
   const items = names.map(n => {
-    const m = manifest?.screens.find(s => s.name === n); const s = p?.screens.find(x => x.name === n); const d = det?.screens.find(x => x.name === n && x.file === s?.file);
+    const m = manifest?.screens.find(s => s.name === n); const s = p?.screens.find(x => x.name === n);
     return {
       name: n, title: s?.title ?? null, file: s ? `${PROTOTYPE_DIR}/${s.file}` : null, manifest: m ? { text: m.text, origin: m.origin, date: m.date } : null, evidence: s?.evidence ?? [],
-      controls: d?.controls ?? [], copy: d?.copy ?? [], fake: [...new Set([...(s?.fake ?? []), ...(s !== d ? d?.fake ?? [] : [])])], unread: d?.unread ?? [], zones: d?.zones ?? [],
-      fragment: p?.reading && s ? fragmentOf(files.find(f => f.name === s.file)?.html ?? '', s.evidence, { file: `${PROTOTYPE_DIR}/${s.file}` }) : null,
+      fake: s?.fake ?? [], fixed: s?.fixed ?? [], fragment: s ? fragmentOf(files.find(f => f.name === s.file)?.html ?? '', s.evidence, { file: `${PROTOTYPE_DIR}/${s.file}` }) : null,
       goes_to: (p?.flows ?? []).filter(f => f.from === n).map(f => ({ screen: f.to, via: f.via })), comes_from: (p?.flows ?? []).filter(f => f.to === n).map(f => ({ screen: f.from, via: f.via })),
     };
   });
   const block = i => {
-    const by = k => i.controls.filter(c => c.kind === k).map(c => `"${c.label}"`).join(', ');
-    const lines = [`### Screen \`${i.name}\`${i.title ? ` — ${i.title}` : ''}${i.file ? ` (${i.file})` : ' (not found in the prototype folder now)'}`];
+    const lines = [`### Screen \`${i.name}\`${i.title ? ` — ${i.title}` : ''}${i.file ? ` (${i.file})` : ` (${lack})`}`];
     lines.push(i.manifest ? `Manifest: ${i.manifest.text} [${i.manifest.origin === 'human' ? `confirmed ${i.manifest.date}` : i.manifest.origin ?? 'untagged'}]` : 'Manifest: this screen is not in the manifest.');
     if (i.evidence.length) lines.push(`Where it is in the prototype: ${i.evidence.join(' | ')}`);
-    if (i.controls.length) lines.push(`Controls: ${['field', 'button', 'link'].map(k => (by(k) ? `${k}s ${by(k)}` : '')).filter(Boolean).join('; ')}`);
-    if (i.copy.length) lines.push(`Text: ${i.copy.join(' | ')}`);
     if (i.goes_to.length) lines.push(`Goes to: ${i.goes_to.map(g => `${g.screen} (through "${g.via}")`).join(', ')}`);
     if (i.comes_from.length) lines.push(`Comes from: ${i.comes_from.map(g => `${g.screen} (through "${g.via}")`).join(', ')}`);
-    const fixed = i.zones.filter(z => z.zone === 'fixed').map(z => z.text); if (fixed.length) lines.push(`Fixed by the owner (do not change without asking): ${fixed.join(' | ')}`);
+    if (i.fixed.length) lines.push(`Fixed by the owner (do not change without asking): ${i.fixed.join(' | ')}`);
     if (i.fake.length) lines.push(`Fake or only an example: ${i.fake.join(' | ')}`);
-    if (i.unread.length) lines.push(`Not read by the program: ${i.unread.join(' | ')}`);
     const many = i.fragment?.html.includes('<!-- ... -->'); const cut = i.fragment?.cut ? `, cut at ${FRAGMENT_CAP} of ${i.fragment.total} characters` : '';
     if (i.fragment) lines.push(i.fragment.script ? `Its code in the prototype (the script that draws it: the function${many ? 's' : ''} holding what the reading points at${cut}):` : `Its HTML in the prototype (the element${many ? 's' : ''} the reading points at${cut}):`, i.fragment.script ? '```js' : '```html', i.fragment.html, '```');
     return lines.join('\n');

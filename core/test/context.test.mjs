@@ -114,10 +114,8 @@ test('context add works on a file whose last section has no trailing newline, an
 
 // The context names its own risk section in its header (risk_section), so the program finds it whatever language its heading is in (R211).
 const ES = '---\nschema: buddy/context@0\ntitle: Contexto del negocio de tienda\nupdated: 2026-01-01\nrisk_section: Apetito de riesgo\n---\n# Contexto del negocio\n\n## Usuarios\n- Las personas del almacén. `human 2026-01-01`\n\n## Apetito de riesgo\n- Costo alto: perder un pedido. `assumed`\n- Costo bajo: un texto mal escrito. `assumed`\n';
-test('the risk section the header names is read whatever its heading says: state, confirm --all-risk and the sources of scope', async () => {
-  const { riskSources } = await import('../src/context.mjs');
+test('the risk section the header names is read whatever its heading says: state, and confirm --all-risk', async () => {
   assert.equal(riskState(read(ES)).state, 'blocked'); assert.equal(riskState(read(ES)).unconfirmed.length, 2);
-  assert.deepEqual(riskSources(read(ES)).map(r => r.text), ['Costo alto: perder un pedido.', 'Costo bajo: un texto mal escrito.']);
   const r = confirmStatements(ES, { allRisk: true, date: '2026-01-02' }); assert.equal(r.changed.length, 2);
   assert.equal(riskState(read(r.text)).state, 'confirmed');
   const d = tmp(); fs.writeFileSync(path.join(d, 'context.md'), ES);
@@ -147,4 +145,38 @@ test('context add finds a section and tells two statements apart in a language w
   const t = '---\nschema: buddy/context@0\ntitle: t\nupdated: 2026-01-01\n---\n## 目的\n\n## 利用者\n- 倉庫の担当者 `human 2026-01-01`\n';
   const r = addStatement(t, { section: '利用者', statement: '経理の担当者', date: '2026-01-02' });
   assert.equal(r.added, true); assert.equal(r.section, '利用者'); assert.match(r.text, /## 利用者\n- 倉庫の担当者 `human 2026-01-01`\n- 経理の担当者 `human 2026-01-02`/);
+});
+
+// R276 AC3, AC4: empty risk section vs missing; confirm --line explains numbering and names the file line's statement.
+test('an empty risk appetite section says it has no line yet, not that it is missing', () => {
+  const emptyEn = '---\nschema: buddy/context@0\ntitle: t\nupdated: 2026-01-01\n---\n## Users\n- x `assumed`\n\n## Risk appetite\n';
+  const r1 = riskState(read(emptyEn));
+  assert.equal(r1.state, 'missing');
+  assert.match(r1.message, /"Risk appetite" section has no line yet/);
+  const emptyEs = ES.replace(/- Costo .*\n/g, '');
+  const r2 = riskState(read(emptyEs));
+  assert.equal(r2.state, 'missing');
+  assert.match(r2.message, /section has no line yet/);
+  assert.doesNotMatch(r2.message, /no section with that heading/);
+  const missingEs = ES.replace('## Apetito de riesgo', '## Riesgos');
+  const r3 = riskState(read(missingEs));
+  assert.equal(r3.state, 'missing');
+  assert.match(r3.message, /no section with that heading/);
+});
+
+test('confirm --line on a non-statement explains numbering without the header and names the file line statement if any', () => {
+  // Header is 6 lines (lines 1-6), body line 1 is '# Contexto del negocio' (file line 7),
+  // body line 4 is '- Las personas del almacén.' (file line 10).
+  assert.throws(() => confirmStatements(ES, { lines: [1] }), /without the header.*buddy context check|buddy context check.*without the header/);
+  assert.throws(() => confirmStatements(ES, { lines: [10] }), err => {
+    assert.match(err.message, /buddy context check/);
+    assert.match(err.message, /without the header/);
+    assert.match(err.message, /file line 10 is statement line 4: "Las personas del almacén\."/);
+    return true;
+  });
+  // A file line beyond body length that maps to a statement in the body (body line 7 is file line 13: '- Costo alto: perder un pedido.')
+  assert.throws(() => confirmStatements(ES, { lines: [13] }), err => {
+    assert.match(err.message, /file line 13 is statement line 7: "Costo alto: perder un pedido\."/);
+    return true;
+  });
 });

@@ -22,7 +22,7 @@ const schemas = Object.fromEntries(Object.values(KINDS).map(k => [k, JSON.parse(
 export { contextStatements };
 
 // Marks each slice record of a change folder with the change it belongs to (`change`, `folder: true`): the folder's change.md (R87).
-// A record outside a folder keeps the parent named by `epic:`, the flat layout of before R87. docs: [{ file, data }] of schema slice@1.
+// docs: [{ file, data }] of schema slice@1.
 // A milestone is the milestone.md of its folder (R118): `milestone` marks each change of its changes/ folder, and the slices of those changes,
 // with the milestone's name (null in the backlog); `milestoneFolder` says the change sits in a milestone's changes/ folder at all.
 export function linkChanges(docs) {
@@ -32,13 +32,16 @@ export function linkChanges(docs) {
   for (const d of docs) {
     if (base(d) === 'milestone.md') { Object.assign(d, { change: null, folder: true, milestone: null, milestoneFolder: false }); continue; }
     const c = base(d) === 'change.md' ? undefined : at.get(path.dirname(path.resolve(d.file)));
-    Object.assign(d, c ? { change: c, folder: true } : { change: base(d) === 'change.md' ? null : d.data.epic ?? null, folder: base(d) === 'change.md' });
+    Object.assign(d, c ? { change: c, folder: true } : { change: null, folder: base(d) === 'change.md' });
     const home = d.folder ? path.dirname(path.dirname(path.resolve(d.file))) : null;           // the folder that holds the change folder
     const mdir = home && path.basename(home) === 'changes' ? path.dirname(home) : null;
     Object.assign(d, { milestone: mdir ? ms.get(mdir) ?? null : null, milestoneFolder: !!mdir && path.basename(path.dirname(mdir)) === 'milestones' });
   }
   return docs;
 }
+
+// Changes live only where the current layout keeps them (R118: milestones/<d>/milestone.md, milestones/<d>/changes/<d>/*.md, backlog/<d>/*.md under docs/buddy); the index reads no slice record elsewhere there.
+export const inLayout = f => { const s = path.resolve(f).split(path.sep); const i = s.findIndex((x, k) => x === 'docs' && s[k + 1] === 'buddy'); if (i < 0) return true; const r = s.slice(i + 2), d = x => /^\d{4}-\d{2}-\d{2}-/.test(x || ''); return r[0] === 'milestones' ? d(r[1]) && (r.length === 3 ? r[2] === 'milestone.md' : r.length === 5 && r[2] === 'changes' && d(r[3])) : r[0] === 'backlog' && r.length === 3 && d(r[1]); };
 
 export function loadFiles(paths) {
   const files = [];
@@ -64,6 +67,7 @@ export function verify(paths, opts = {}) {
     const doc = parseDocument(text);
     if (doc.error) { add(file, 'front matter', doc.error); continue; }
     const kind = KINDS[doc.data.schema];
+    if (kind === 'slice' && !inLayout(file) && !/^(change|milestone)\.md$/.test(path.basename(file))) continue;
     for (const e of validate(schemas[kind], doc.data)) add(file, e.path, e.message);
     if (opts.canonical && kind === 'slice' && !isCanonical(text, doc.data, doc.body)) add(file, 'form', 'not in canonical form: the file differs from what the program would write (change slices with `buddy start|step|move`, not by hand)');
     docs.push({ file, kind, data: doc.data, body: doc.body });

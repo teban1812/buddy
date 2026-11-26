@@ -67,10 +67,10 @@ test('with sub-steps the next step is the first open leaf, and nesting is shown'
   assert.match(briefText(b), /\n  \[ \] 2\. Screen\n    \[ \] 2\.1 Empty state   <- next\n    \[ \] 2\.2 Saved books/);
   stepSetIn(d, id, '2.1', true); stepSetIn(d, id, '2.2', true); assert.equal(resumeBrief(d, id, NOW).next_step, '2');      // children done: now the parent
 });
-test('--handover writes the brief to .git/buddy/handover/ and prints its path (R134)', () => {
+test('--handover writes the brief to .buddy/handover/ and prints its path (R134)', () => {
   const { d, id } = cut(); const r = spawnSync(process.execPath, [BIN, '--repo', d, '--now', NOW, id, '--handover'], { encoding: 'utf8' });
   const file = r.stdout.trim(); assert.equal(r.status, 0, r.stderr);
-  assert.equal(path.relative(d, file).replace(/\\/g, '/'), `.git/buddy/handover/${id}-dev-2026-10-31T180000Z.md`);
+  assert.equal(path.relative(d, file).replace(/\\/g, '/'), `.buddy/handover/${id}-dev-2026-10-31T180000Z.md`);
   assert.equal(fs.readFileSync(file, 'utf8'), briefText(resumeBrief(d, id, NOW)));
 });
 import { assumeAdd, assumeSet } from '../src/slicestore.mjs';

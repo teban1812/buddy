@@ -8,6 +8,7 @@ import { startSlice, moveSlice } from '../src/slicestore.mjs';
 import { addRequest, setRequest, setPriority, dependRequest, undependRequest, mapChanges, mapChangesText, orderWarningsText } from '../src/requests.mjs';
 import { loadBoard, boardText, boardHtml } from '../src/board.mjs';
 import { digest, digestText } from '../src/digest.mjs';
+const lang = h => h.replace(/<span lang="en">(.*?)<\/span>/g, '$1');   // the records' own text is marked with its language: out for what these tests read
 
 // Each change's priority and what it waits for on the board, the warnings of the order in what waits for the owner, and the digest's line
 // when a priority or a dependency changed since the last look (R133).
@@ -38,7 +39,7 @@ test('each change shows the highest priority of the requests it or its slices co
   const text = boardText(board);
   assert.match(text, new RegExp(`${a.id}  feat     \\[Must\\] Sign in  · `)); assert.match(text, new RegExp(`${b.id}  feat     \\[Should\\] Save books  `));
   assert.match(text, new RegExp(`${e.id}  feat     Nothing asked  · `));
-  const html = boardHtml(board); assert.match(html, /<b>\[Must\] Sign in<\/b>/); assert.match(html, /<b>Nothing asked<\/b>/);
+  const html = lang(boardHtml(board)); assert.match(html, /<b>\[Must\] Sign in<\/b>/); assert.match(html, /<b>Nothing asked<\/b>/);
   accept(d, a.id); assert.match(boardText(loadBoard(d, NOW)), new RegExp(`${a.id}  \\[Must\\] Sign in  · accepted`));
 });
 
@@ -50,7 +51,7 @@ test('a change says what it waits for: a change covering what its requests depen
   const text = boardText(board);
   assert.match(text, new RegExp(`\\[Should\\] Save books  waits for: Sign in \\[${a.id}\\]  · `));
   assert.match(text, new RegExp(`\\[Could\\] Export the list  its dependency Old idea \\[${old.id}\\] was abandoned  · `));
-  assert.match(boardHtml(board), new RegExp(`waits for: Sign in \\[${a.id}\\]`));
+  assert.match(lang(boardHtml(board)), new RegExp(`waits for: Sign in<`));
   const direct = startSlice({ repo: d, title: 'Report', request: 'r', ...goal, dependsOn: [b.id], now });
   board = loadBoard(d, NOW); assert.deepEqual(row(direct.id).waits_for.map(x => x.id), [b.id]);
   for (const to of ['ready', 'building']) moveSlice(d, a.id, to, { now }); board = loadBoard(d, NOW); assert.deepEqual(row(b.id).waits_for.map(x => x.id), [a.id]);   // building: still waited for
@@ -92,7 +93,7 @@ test('a change depending on a delivered (not accepted) change waits for nothing 
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-')); fs.mkdirSync(path.join(d, 'docs')); G(d, ['init', '-q', '-b', 'main']);
   const a = startSlice({ repo: d, title: 'Sign in', request: 'r', ...goal, now }); const b = startSlice({ repo: d, title: 'Save books', request: 'r', ...goal, dependsOn: [a.id], now });
   for (const to of ['ready', 'building']) moveSlice(d, a.id, to, { now });
-  const shows = () => { const board = loadBoard(d, NOW); return [boardText(board), boardHtml(board), digestText(digest(d, NOW))].map(t => t.includes(`waits for: Sign in [${a.id}]`) || t.includes(`waits for Sign in [${a.id}]`)); };
+  const shows = () => { const board = loadBoard(d, NOW); return [boardText(board), lang(boardHtml(board)), digestText(digest(d, NOW))].map(t => t.includes(`waits for: Sign in [${a.id}]`) || t.includes(`waits for Sign in [${a.id}]`)); };
   assert.deepEqual(shows(), [true, true, true]);                     // being built: waited for everywhere (the digest says it in Next)
   moveSlice(d, a.id, 'delivered', { now });
   assert.deepEqual(shows(), [false, false, false]);                  // delivered, not accepted: no longer

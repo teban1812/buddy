@@ -5,8 +5,9 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { startSlice, listSlices, readSlice, moveSlice, stepAddTo, stepSetIn, stepsOf } from '../src/slicestore.mjs';
+import { startSlice, listSlices, readSlice, moveSlice, stepAddTo, stepSetIn, stepDropIn, stepsOf } from '../src/slicestore.mjs';
 import { verify } from '../src/verify.mjs';
+import { resumeBrief, briefText } from '../src/resume.mjs';
 import { createBatch, writeBatchFile } from '../src/queue.mjs';
 import { addStep, setStep, parseSteps } from '../src/slice.mjs';
 import { nameFromTitle, SLICE_NAME } from '../src/ids.mjs';
@@ -26,7 +27,6 @@ test('start writes a canonical, verifiable file, in refining, with ranks that gr
 test('start refuses what does not verify and leaves nothing behind', () => {
   const d = repo();
   assert.throws(() => startSlice({ repo: d, title: 'x', request: 'y', inChange: 'no-such-slice' }), /no slice or change no-such-slice/);
-  assert.throws(() => startSlice({ repo: d, title: 'x', request: 'y', kind: 'epic' }), /a change in several pieces is a change with slices/);
   assert.throws(() => startSlice({ repo: d, title: 'x', request: 'y', kind: 'story' }), /kind/);
   assert.throws(() => startSlice({ repo: d, title: '', request: 'y' }), /title/);
   assert.deepEqual(listSlices(d), []);
@@ -92,6 +92,20 @@ test('steps: add, nest, number, tick, reopen', () => {
   assert.throws(() => stepSetIn(d, s.id, '9', true), /no step 9/); assert.throws(() => stepAddTo(d, s.id, 'x', { under: '9' }), /no step 9/);
   assert.throws(() => stepAddTo(d, s.id, 'cites a ghost (AC7)'), /cites AC7/);
   assert.equal(stepsOf(readSlice(d, s.id)).length, 5);           // the refused add left no trace
+  assert.deepEqual(canon(d), []);
+});
+test('a step a decision voided is dropped with its reason, stays in the record and no longer counts as open (R238)', () => {
+  const d = repo(); const s = mk(d);
+  stepAddTo(d, s.id, 'Storage'); stepAddTo(d, s.id, 'Screen'); stepAddTo(d, s.id, 'Empty state', { under: '2' }); stepAddTo(d, s.id, 'Cross-tool run');
+  assert.throws(() => stepDropIn(d, s.id, '3', 'R9'), /steps are dropped while the slice is being built/);
+  for (const to of ['ready', 'building']) moveSlice(d, s.id, to);
+  assert.throws(() => stepDropIn(d, s.id, '3', ' '), /say why/); assert.throws(() => stepDropIn(d, s.id, '2', 'R9'), /open sub-steps/);
+  stepSetIn(d, s.id, '1', true); assert.throws(() => stepDropIn(d, s.id, '1', 'R9'), /is done/);
+  stepDropIn(d, s.id, '3', 'R9 voided it');
+  assert.match(fs.readFileSync(readSlice(d, s.id).file, 'utf8'), /^- \[-\] 3\. Cross-tool run \(dropped: R9 voided it\)$/m);
+  const st = stepsOf(readSlice(d, s.id)); assert.deepEqual(st.filter(x => !x.done).map(x => x.num), ['2', '2.1']); assert.equal(st.find(x => x.num === '3').dropped, true);
+  assert.match(briefText(resumeBrief(d, s.id, new Date())), /\[-\] 3\. Cross-tool run \(dropped: R9 voided it\)/, 'the brief shows it dropped');
+  assert.throws(() => stepSetIn(d, s.id, '3', false), /was dropped/); assert.throws(() => stepDropIn(d, s.id, '3', 'again'), /already dropped/);
   assert.deepEqual(canon(d), []);
 });
 test('step functions on a body without the section', () => {
@@ -233,15 +247,15 @@ test('rename a change: its folder keeps its date and takes the name, and every r
   assert.deepEqual(readSlice(d, other.id).data.depends_on, ['book-list']); assert.equal(loadBatchFile(path.join(nd, 'questions-1.md')).slice, 'book-list');
   assert.throws(() => readSlice(d, e.id), /no slice or change reading-list/); assert.deepEqual(canon(d), []);
 });
-test('rename a slice; refused after refining unless forced, refused on a bad or taken name, and a refused rename leaves everything as it was', () => {
+test('rename a slice; refused after refining, refused on a bad or taken name, and a refused rename leaves everything as it was', () => {
   const d = repo(); const e = mk(d, { title: 'Reading list', criteria: [] }); const s = mk(d, { inChange: e.id }); const dir = path.dirname(e.file);
   writeBatchFile(path.join(dir, 'questions-1.md'), createBatch({ slice: s.id, questions: [{ situation: 'Order?', options: [{ label: 'a', cost: 'x' }, { label: 'b', cost: 'y' }] }] }, { date: '2026-10-31' }));
   renameSlice(d, s.id, 'keep-books'); assert.ok(fs.existsSync(path.join(dir, 'keep-books.md'))); assert.ok(!fs.existsSync(path.join(dir, 'save-books.md')));
   assert.equal(loadBatchFile(path.join(dir, 'questions-1.md')).slice, 'keep-books');
   assert.throws(() => renameSlice(d, 'keep-books', 'reading-list'), /the name reading-list is taken/); assert.throws(() => renameSlice(d, 'keep-books', 'Keep_Books'), /is not a slice name/);
-  moveSlice(d, 'keep-books', 'ready'); assert.throws(() => renameSlice(d, 'keep-books', 'hold-books'), /Save books \[keep-books\] is ready: a change or slice is renamed only while it is refining/);
-  const cli = spawnSync(process.execPath, [BUDDY, 'slice', 'rename', 'keep-books', 'hold-books', '--force', '--repo', d], { encoding: 'utf8' }); assert.equal(cli.status, 0, cli.stderr);
-  assert.match(cli.stdout, /renamed keep-books to hold-books: .*hold-books\.md\n  followed: .*questions-1\.md\nnote: keep-books was ready; the commits already made keep the old name keep-books/);
+  const cli = spawnSync(process.execPath, [BUDDY, 'slice', 'rename', 'keep-books', 'hold-books', '--repo', d], { encoding: 'utf8' }); assert.equal(cli.status, 0, cli.stderr);
+  assert.match(cli.stdout, /renamed keep-books to hold-books: .*hold-books\.md\n  followed: .*questions-1\.md\n$/);
+  moveSlice(d, 'hold-books', 'ready'); assert.throws(() => renameSlice(d, 'hold-books', 'keep-books'), /Save books \[hold-books\] is ready: a change or slice is renamed only while it is refining/);
   const before = fs.readdirSync(dir).sort(); fs.writeFileSync(path.join(dir, 'questions-2.md'), fs.readFileSync(path.join(dir, 'questions-1.md'), 'utf8').replace(/^id: B-\S+/m, 'id: B-2026-10-31-0bad').replace(/^slice: hold-books/m, 'slice: ghost'));
   assert.throws(() => renameSlice(d, e.id, 'book-list'), /unknown slice ghost/);                // a problem under docs/buddy refuses the whole rename
   assert.ok(fs.existsSync(dir)); assert.ok(!fs.existsSync(path.join(d, 'docs/buddy/backlog/2026-10-31-book-list'))); assert.deepEqual(fs.readdirSync(dir).sort(), [...before, 'questions-2.md'].sort());

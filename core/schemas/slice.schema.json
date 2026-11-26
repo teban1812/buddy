@@ -18,7 +18,7 @@
     },
     "id": {
       "type": "string",
-      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+      "pattern": "^(?=.{1,40}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
     },
     "title": {
       "type": "string",
@@ -34,7 +34,6 @@
         "perf",
         "test",
         "spike",
-        "epic",
         "milestone"
       ]
     },
@@ -54,15 +53,11 @@
       "type": "integer",
       "minimum": 0
     },
-    "epic": {
-      "type": "string",
-      "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
-    },
     "depends_on": {
       "type": "array",
       "items": {
         "type": "string",
-        "pattern": "^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\\d{4}-\\d{2}-\\d{2}-[0-9a-f]{4})$"
+        "pattern": "^(?=.{1,40}$)[a-z0-9]+(?:-[a-z0-9]+)*$"
       }
     },
     "branch": {
@@ -85,6 +80,18 @@
     "request": {
       "type": "string",
       "minLength": 1
+    },
+    "request_history": {
+      "type": "array",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["text", "until"],
+        "properties": {
+          "text": { "type": "string", "minLength": 1 },
+          "until": { "type": "string", "pattern": "^\\d{4}-\\d{2}-\\d{2}T\\d{2}:\\d{2}:\\d{2}Z$" }
+        }
+      }
     },
     "batches": {
       "type": "array",
@@ -435,6 +442,10 @@
           "expect": {
             "type": "string",
             "minLength": 1
+          },
+          "at": {
+            "$comment": "when it was set; a note of the checkpoint about this way to try is settled when it was rewritten after the checkpoint",
+            "type": "string"
           }
         }
       }

@@ -36,7 +36,7 @@ test('the card says what will be built and in what order, the doubts that wait a
 });
 test('with no doubt and no assumption it says so, asks only for the go-ahead, and a building milestone says it is already building', () => {
   const { d, m, a, b } = project(); assumeNone(d, a.id); assumeNone(d, b.id);
-  const card = milestoneCard(d, m.id); assert.match(card, /Doubts: none open\./); assert.match(card, /\nStudied, nothing to assume: Save books, Sort books\.\n/); assert.doesNotMatch(card, /Not studied yet|none announced/); assert.match(card, /Say "sí" to start, or answer a doubt or correct an assumption first\. Nothing is built until you do\./);
+  const card = milestoneCard(d, m.id); assert.match(card, /Doubts: none open\./); assert.match(card, /\nStudied, nothing to assume: Save books, Sort books\.\n/); assert.doesNotMatch(card, /Not studied yet|none announced/); assert.match(card, /Say "yes" to start, or answer a doubt or correct an assumption first\. Nothing is built until you do\./);
   moveSlice(d, m.id, 'ready'); moveSlice(d, m.id, 'building');
   assert.match(milestoneCard(d, m.id), /^START  .*already building/); assert.match(milestoneCard(d, m.id), /Already building: this is what is being built\./);
   assert.throws(() => milestoneCard(d, 'ghost'), /there is no milestone ghost; they are: /);

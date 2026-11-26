@@ -124,7 +124,7 @@ test('a rebuild rereads only the records that changed and drops the ones gone; f
   assert.deepEqual(two.index, buildIndex(d, { now: at }));
   const gone = path.join(path.dirname(readSlice(d, ch.id).file), 'evidence', 'evidence-2026-10-31T090000Z-run.json'); fs.rmSync(gone);
   const three = refreshIndex(d, { now: at }); assert.deepEqual(three.reread, []); assert.equal(three.index.evidence.length, 1);
-  assert.ok(!Object.keys(JSON.parse(fs.readFileSync(path.join(d, '.git', 'buddy', 'index-cache.json'), 'utf8')).files).includes(relTo(d, gone)));
+  assert.ok(!Object.keys(JSON.parse(fs.readFileSync(path.join(d, '.buddy', 'index-cache.json'), 'utf8')).files).includes(relTo(d, gone)));
   assert.equal(refreshIndex(d, { force: true }).reread.length, one.reread.length - 1);
 });
 test('the checkpoint\'s summary beside its evidence is what the index reads; older evidence is read whole; verify names a summary that does not match (AC3)', () => {
@@ -157,7 +157,21 @@ test('every reader of evidence finds a file under its short name for its piece, 
   assert.deepEqual(loadBoard(d, NOW, { index: x }), loadBoard(d, NOW)); assert.deepEqual(ownerMinutes(d, { index: x }), ownerMinutes(d));
   assert.deepEqual(ownerMinutes(d).changes.find(c => c.id === ch.id).events.filter(e => e.kind === 'exception').map(e => e.from), ['2026-10-31T09:00:00Z', '2026-10-31T11:00:00Z']);   // one under an old name, one under the new
   moveSlice(d, a.id, 'delivered');                                                                          // the milestone review reads the index's list, checked above
-  assert.match(JSON.stringify(loadBoard(d, NOW)), /no tests added/); assert.match(acceptCard(d, ch.id), /no tests added/);
+  assert.match(JSON.stringify(loadBoard(d, NOW).waiting), /the reviews left 1 note/); assert.doesNotMatch(JSON.stringify(loadBoard(d, NOW)), /no tests added/);   // the board reads the file for its note count and shows none of its text (R249)
+  assert.match(acceptCard(d, ch.id), /no tests added/);   // and the summary to accept still carries it in full
   fs.rmSync(path.join(dir, name)); fs.rmSync(summaryFileOf(path.join(dir, name)));                         // without it, the latest is again the one written before
   assert.match(buildIndex(d).changes.find(r => r.id === a.id).evidence, /evidence-2026-10-31T100000Z-run\.json$/); assert.equal(latestEvidenceFile(dir, a.id).file, 'evidence-2026-10-31T100000Z-run.json');
+});
+
+test('records of older layouts are not read as changes, and verify refuses --madr', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'old-')); execSync('git init -q', { cwd: d });
+  const rec = id => `---\nschema: buddy/slice@1\nid: ${id}\ntitle: Old ${id}\nkind: feat\nstatus: refining\nrank: 1000\ncreated: 2026-01-01T00:00:00Z\nrequest: r\n---\n# Old ${id}\n`;
+  const put = (f, t) => { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), t); };
+  put('docs/buddy/slices/flat-one.md', rec('flat-one')); put('docs/buddy/changes/2026-01-01-old-two/change.md', rec('old-two'));
+  const run = (...a) => spawnSync(process.execPath, [BUDDY, ...a], { cwd: d, encoding: 'utf8' });
+  const board = run('board'); assert.doesNotMatch(board.stdout, /flat-one|old-two|Old flat|Old old/);
+  assert.equal(run('find', 'old').stdout.includes('flat-one'), false); assert.equal(run('find', 'old').stdout.includes('old-two'), false);
+  const ix = buildIndex(d);
+  assert.doesNotMatch(JSON.stringify(ix), /flat-one|old-two/);
+  const m = run('verify', 'docs/buddy', '--madr'); assert.equal(m.status, 2); assert.match(m.stderr, /unknown option --madr/);
 });

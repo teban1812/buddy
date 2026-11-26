@@ -39,6 +39,6 @@ export function milestoneCard(repo, id, { index } = {}) {
   for (const { change, d } of defaults) o.push(`  - ${named(x, change)}: ${d.text ?? d.default ?? JSON.stringify(d)}  (an answer nobody gave)`);
   if (none.length) o.push(`Studied, nothing to assume: ${none.map(c => c.title).join(', ')}.`);
   if (unstudied.length) o.push(`Not studied yet, so their assumptions are still to come (${unstudied.length}): ${unstudied.map(c => `${c.title} [${c.id}]`).join(', ')}.`);
-  o.push('', m.status === 'building' ? 'Already building: this is what is being built.' : qs.some(e => e.q.blocking) ? 'Answer the doubts that stop the work, say what you correct, and then give the go-ahead.' : 'Say "sí" to start, or answer a doubt or correct an assumption first. Nothing is built until you do.');
+  o.push('', m.status === 'building' ? 'Already building: this is what is being built.' : qs.some(e => e.q.blocking) ? 'Answer the doubts that stop the work, say what you correct, and then give the go-ahead.' : 'Say "yes" to start, or answer a doubt or correct an assumption first. Nothing is built until you do.');
   return o.join('\n') + '\n';
 }

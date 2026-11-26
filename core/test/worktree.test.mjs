@@ -33,32 +33,34 @@ function building(wt, title) {
   fs.writeFileSync(path.join(wt, 'thing.js'), 'export const x = 1;\n'); fs.writeFileSync(path.join(wt, 'thing.test.js'), "import assert from 'node:assert';\nassert.equal(1, 1);\n"); return s.id;
 }
 
-test('in a worktree the checkpoint, the board, the digest, the index, the hand-overs and the workers work, in the worktree\'s own git folder', () => {
+test('in a worktree the checkpoint, the board, the digest, the index, the hand-overs and the workers work, in the worktree\'s own .buddy folder', () => {
   const { d, one } = repoWithWorktrees(); assert.ok(fs.statSync(path.join(one, '.git')).isFile());
-  const own = gitDir(one); assert.equal(real(own), real(path.join(d, '.git', 'worktrees', 'one'))); assert.equal(buddyDir(one), path.join(own, 'buddy')); assert.ok(isGitRepo(one));
+  const own = gitDir(one); assert.equal(real(own), real(path.join(d, '.git', 'worktrees', 'one'))); assert.equal(buddyDir(one), path.join(one, '.buddy')); assert.ok(isGitRepo(one));
   const id = building(one, 'Do a thing');
-  const h = writeHandover(one, id, NOW); assert.equal(real(path.dirname(h)), real(path.join(own, 'buddy', 'handover')));         // Dev's hand-over
+  const h = writeHandover(one, id, NOW); assert.equal(real(path.dirname(h)), real(path.join(one, '.buddy', 'handover')));         // Dev's hand-over
   const r = checkpoint({ repo: one, slice: id, review: clean, human: true });
   assert.equal(real(path.resolve(one, r.evidence.handover.dev.path)), real(h));                                                  // the checkpoint finds it there
   assert.deepEqual(r.evidence.reasons, []); assert.equal(r.decision, 'APPROVE'); assert.equal(readSlice(one, id).data.status, 'delivered');
   assert.equal(path.dirname(r.evidenceFile), path.join(path.dirname(readSlice(one, id).file), 'evidence'));        // evidence with the change, as in a plain repository
-  assert.ok(fs.existsSync(path.resolve(one, r.evidence.handover.reviewer.path))); assert.equal(real(path.dirname(path.resolve(one, r.evidence.handover.reviewer.path))), real(path.join(own, 'buddy', 'handover')));
+  assert.ok(fs.existsSync(path.resolve(one, r.evidence.handover.reviewer.path))); assert.equal(real(path.dirname(path.resolve(one, r.evidence.handover.reviewer.path))), real(path.join(one, '.buddy', 'handover')));
   assert.match(boardText(loadBoard(one, NOW)), /Do a thing/);
-  writeMark(one, NOW); assert.equal(readMark(one), NOW); assert.ok(fs.existsSync(path.join(own, 'buddy', 'last-looked'))); assert.match(digestText(digest(one, NOW)), /^DIGEST /);
-  const x = refreshIndex(one, { force: true }); assert.equal(x.file, indexFile(one)); assert.ok(fs.existsSync(path.join(own, 'buddy', 'index.json'))); assert.equal(x.index.changes[0].id, id);
+  writeMark(one, NOW); assert.equal(readMark(one), NOW); assert.ok(fs.existsSync(path.join(one, '.buddy', 'last-looked'))); assert.match(digestText(digest(one, NOW)), /^DIGEST /);
+  const x = refreshIndex(one, { force: true }); assert.equal(x.file, indexFile(one)); assert.ok(fs.existsSync(path.join(one, '.buddy', 'index.json'))); assert.equal(x.index.changes[0].id, id);
   registerWorker(one, { slice: id, role: 'dev', id: 'agent-1' }); assert.deepEqual(workers(one).map(w => w.id), ['agent-1']);
-  assert.ok(!fs.existsSync(path.join(d, '.git', 'buddy')));                                                        // nothing went to the main repository's folder
+  assert.ok(!fs.existsSync(path.join(d, '.buddy')));                                                        // nothing went to the main repository's folder
+  assert.equal(fs.readFileSync(path.join(one, '.buddy', '.gitignore'), 'utf8'), '*\n');
+  assert.equal(G(one, 'status', '--porcelain', '--', '.buddy').trim(), '', '.buddy/ is ignored by git');
 });
 
-test('two worktrees of one repository keep their own index, marks and hand-overs; the plain repository keeps .git/buddy', () => {
+test('two worktrees of one repository keep their own index, marks and hand-overs; the plain repository keeps .buddy', () => {
   const { d, one, two } = repoWithWorktrees(); const a = building(one, 'First thing'); const b = building(two, 'Second thing');
   refreshIndex(one, { force: true }); refreshIndex(two, { force: true }); refreshIndex(d, { force: true });
   assert.notEqual(real(indexFile(one)), real(indexFile(two)));
   assert.deepEqual(JSON.parse(fs.readFileSync(indexFile(one), 'utf8')).changes.map(r => r.id), [a]);
   assert.deepEqual(JSON.parse(fs.readFileSync(indexFile(two), 'utf8')).changes.map(r => r.id), [b]);
-  assert.equal(indexFile(d), path.join(d, INDEX)); assert.deepEqual(JSON.parse(fs.readFileSync(path.join(d, INDEX), 'utf8')).changes, []);   // plain: as before
+  assert.equal(indexFile(d), path.join(d, INDEX)); assert.deepEqual(JSON.parse(fs.readFileSync(path.join(d, INDEX), 'utf8')).changes, []);
   writeMark(one, NOW); assert.equal(readMark(two), null); assert.equal(readMark(d), null);
   const h1 = writeHandover(one, a, NOW); const h2 = writeHandover(two, b, NOW); assert.notEqual(real(path.dirname(h1)), real(path.dirname(h2)));
-  assert.equal(gitDir(d), path.join(d, '.git')); assert.equal(buddyDir(d), path.join(d, '.git', 'buddy'));
-  const none = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-none-')); assert.equal(gitDir(none), null); assert.equal(isGitRepo(none), false); assert.equal(buddyDir(none), path.join(none, '.git', 'buddy'));
+  assert.equal(gitDir(d), path.join(d, '.git')); assert.equal(buddyDir(d), path.join(d, '.buddy'));
+  const none = fs.mkdtempSync(path.join(os.tmpdir(), 'wt-none-')); assert.equal(gitDir(none), null); assert.equal(isGitRepo(none), false); assert.equal(buddyDir(none), path.join(none, '.buddy'));
 });

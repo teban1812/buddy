@@ -82,7 +82,8 @@ test('the board and the digest: what has nobody waits for the owner, with the to
   setRequest(d, 'RQ1', { to: 'export-csv' }, { now });
   const b = loadBoard(d, NOW); const text = boardText(b);
   assert.match(text, /^BOARD  2026-10-31 18:00 UTC\n\nNow: nothing is being built\nNext: milestone First release \[mvp\] · waits for your go-ahead\n\nWaiting for you \(1\)\n  - 4 of what you asked for have no destination yet: Login with SSO \[RQ2\] \| Dark mode \[RQ3\] \| Print \[RQ4\] \| and 1 more \(buddy requests list --open\)\n\nWhat you asked for \(5\): 1 covered, 4 without a destination yet\n\nMILESTONE/);
-  assert.match(boardHtml(b), /4 of what you asked for have no destination yet[\s\S]*What you asked for \(5\): 1 covered, 4 without a destination yet/);
+  assert.match(boardHtml(b).replace(/<span data-l="es">.*?<\/span>/g, '').replace(/<[^>]+>/g, ''), /4 of what you asked for have no destination yet/);   // what has no destination appears only in what waits for the owner (R245)
+  assert.doesNotMatch(boardHtml(b).replace(/<[^>]+>/g, ''), /What you asked for \(5\)/);
   const dg = digestText(digest(d, NOW)); assert.match(dg, /Waiting for you \(1\)\n  - 4 of what you asked for have no destination yet: [^\n]+\n\nWhat you asked for \(5\): 1 covered, 4 without a destination yet\n/);
   assert.deepEqual(digest(d, NOW).requests.nobody.map(x => x.id), ['RQ2', 'RQ3', 'RQ4', 'RQ5']);
   setRequest(d, 'RQ2', { excluded: 'mvp' }, { now }); setRequest(d, 'RQ3', { deferred: 'later' }, { now }); setRequest(d, 'RQ4', { to: 'export-csv' }, { now });

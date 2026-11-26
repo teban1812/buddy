@@ -1,12 +1,12 @@
 // `buddy settle` (R54, R91, R124): the commits made without a slice (a quick fix, a tweak, vibe work) are read after the fact. Nothing was asked
 // while they were made; here they are classified, the checks run, and the owner is told only when something deviated. Small corrections leave
-// no record in docs/buddy/ (R91): the evidence is kept in .git/buddy/settled/ and shown by the digest.
+// no record in docs/buddy/ (R91): the evidence is kept in .buddy/settled/ and shown by the digest.
 import fs from 'node:fs';
 import path from 'node:path';
-import { git, runValidate } from './proc.mjs';
+import { git, runValidate, APPROVAL } from './proc.mjs';
 import { aggregate, shortstat, isDoc, isTestFile } from './patch.mjs';
 import { analyse, RECORDS, generatedByName } from './scan.mjs';
-import { buddyDir } from './gitdir.mjs';
+import { buddyDir, ensureBuddyDir } from './gitdir.mjs';
 
 const dir = repo => path.join(buddyDir(repo), 'settled');
 const markFile = repo => path.join(dir(repo), 'upto');   // the head the last settle reached, kept beside its records
@@ -19,16 +19,16 @@ const EXCLUDE = [':!package-lock.json', ':!**/package-lock.json', ':!**/dist/**'
 const LOGIC = /\.(m?[jt]sx?|cs|py|go|java|rb|php|rs|kt|swift)$/i;
 const SPECIFIED = /^(docs\/inputs\/|docs\/standards\/|docs\/context\.md$)/;
 
-// The commits of `since..HEAD` that carry no `Slice:` trailer and are not only Buddy's records, oldest first: [{ hash, type, subject, files }].
+// The commits of `since..HEAD` that carry no `Slice:` trailer and are not only Buddy's records nor an approval of the owner (R281), oldest first: [{ hash, type, subject, files }].
 export function freeCommits(repo, since) {
   const out = git(['log', '--reverse', '--format=%H%x1f%s%x1f%(trailers:key=Slice,valueonly,separator=%x1f)%x1e', since ? `${since}..HEAD` : 'HEAD~1..HEAD'], repo);
   return out.split('\x1e').map(r => r.trim().split('\x1f')).filter(([h, , ...tr]) => h && !tr.some(t => t.trim())).map(([hash, subject]) => {
     const files = git(['show', '--name-only', '--format=', '--no-renames', hash], repo).split('\n').filter(Boolean);
     return { hash, subject, type: (/^(\w+)(\(.*\))?!?:/.exec(subject) || [, ''])[1], files };
-  }).filter(c => c.files.length && !c.files.every(f => f.startsWith('docs/buddy/')));
+  }).filter(c => c.files.length && !c.files.every(f => f.startsWith('docs/buddy/')) && !c.subject.startsWith(APPROVAL));
 }
 
-// Where a settle starts (R155): `since` when given, else the head the last settle recorded (its evidence in .git/buddy/settled/), else the
+// Where a settle starts (R155): `since` when given, else the head the last settle recorded (its evidence in .buddy/settled/), else the
 // mark of before, else only the last commit. Commits a settle already read are never read again, nor their warnings repeated. A settle whose
 // checks failed (recorded only before R157) settled nothing: the next one starts where it started, and checks its commits again.
 export function settledUpto(repo) {
@@ -76,7 +76,7 @@ export function settle({ repo = process.cwd(), since, now = () => new Date(), va
     validate_exit: v.status, kind: grew ? 'grew' : 'small-correction', ...(grew ? { grew_from: grewFrom, grew_why: fromText(grewFrom).trim(), grew_big: big } : {}), deviations, needs_owner: needsOwner };
   // Red checks settle nothing (R157): no record and no mark, so the next settle reads the same commits and runs the checks again.
   if (v.status !== 0) return { settled: false, from, upto: head, record, text: settleText(record) };
-  fs.mkdirSync(dir(repo), { recursive: true });
+  ensureBuddyDir(repo, 'settled');
   fs.writeFileSync(path.join(dir(repo), `settled-${record.when.replace(/[-:]/g, '')}-${head.slice(0, 7)}.json`), JSON.stringify(record, null, 1) + '\n');
   fs.writeFileSync(markFile(repo), head + '\n');
   return { settled: true, record, text: settleText(record) };

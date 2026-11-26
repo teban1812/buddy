@@ -2,7 +2,7 @@
 // Port of probes/dotnet/buddy-v2.mjs `final` (behaviour unchanged); differences: paths are not hard-coded, the reviewer can be replaced,
 // the simulated navigator of the research harness is an option (`navigator`; without it and without `human` the result is NEEDS_HUMAN), and the navigator log is written only when `log` is given.
 import { spawnSync } from 'node:child_process';
-import { git, gitOk, runValidate, copyIndex } from './proc.mjs';
+import { git, gitOk, runValidate, copyIndex, hasNpmScript } from './proc.mjs';
 import { readSlice, moveSlice, deliverChangeOf, stepsOf, batchesOf, changeDirOf } from './slicestore.mjs';
 import { readContext, riskState } from './context.mjs';
 import { unconfirmedDefaults } from './queue.mjs';
@@ -11,13 +11,14 @@ import crypto from 'node:crypto';
 import os from 'node:os';
 import path from 'node:path';
 import { scan, analyse, RECORDS } from './scan.mjs';
+import { plan } from './tools.mjs';
 import { aggregate, shortstat, nameStatus, reviewDiff, isDoc, isTestFile } from './patch.mjs';
 import { screensBrief, manifestProblems } from './prototype.mjs';
 import { parseDocument } from './frontmatter.mjs';
-import { checksText, codeHashOf, blobsOf, blobsForRecord, filesHash, isCodeFile, unspecifiedOf, costlyReason, withReclassified, sharedValidate, currentEnvironment, goalHashOf, reuseRefusal, testsOf, FULL_TESTS, EVIDENCE_FILE, evidenceName, writeEvidence, blobsForEvidence, notVerifiedOf, verifyHintsOf, unstableOf } from './evidence.mjs';
+import { ESCALATED, WAYS_UNPROVEN, checksText, codeHashOf, blobsOf, blobsForRecord, filesHash, isCodeFile, unspecifiedOf, costlyReason, withReclassified, sharedValidate, currentEnvironment, goalHashOf, reuseRefusal, testsOf, testsCover, FAST_TESTS, FULL_TESTS, EVIDENCE_FILE, evidenceName, writeEvidence, blobsForEvidence, notVerifiedOf, verifyHintsOf, unstableOf } from './evidence.mjs';
 import { inputs as recordInputs } from './index.mjs';
 import { confirmedAssumptions } from './slice.mjs';
-import { buddyDir } from './gitdir.mjs';
+import { buddyDir, ensureBuddyDir } from './gitdir.mjs';
 import { NORMATIVE, NORMATIVE_RULE } from './resume.mjs';
 
 // What the reviewer is told when it can read the repository (R128): the read-only tools it has, what it must open, and where earlier decisions are.
@@ -96,19 +97,26 @@ export function verdictIn(text) {
 
 export const REVIEWER_TOOLS = ['Read', 'Grep', 'Glob', 'Bash(git show:*)', 'Bash(git diff:*)', 'Bash(git log:*)'];
 
-// Reads the stream of a reviewer session (`--output-format stream-json`): its verdict, the cost, and what it opened. `read` are the paths it read
-// or searched, `commands` the git commands it ran; the checkpoint uses them to know which files of the work the reviewer really saw.
+// Reads the stream of a reviewer session (`--output-format stream-json`, Claude Code or Antigravity): its verdict, the cost, and what it opened.
+// `read` are the paths it read or searched, `commands` the git commands it ran; the checkpoint uses them to know which files of the work the reviewer really saw.
 export function parseReviewerStream(stdout) {
   const out = { review: { does_what_was_asked: null, weakens_or_hides_checks: null, unspecified_decisions: [], details: 'reviewer failed' }, read: [], commands: [], cost: undefined, ended: false };
+  const add = (list, val) => { const s = String(val || ''); if (s && !list.includes(s)) list.push(s); };
   let result = '';
   for (const line of String(stdout || '').split('\n')) {
     let e; try { e = JSON.parse(line); } catch { continue; }
     if (e.type === 'assistant') { for (const c of e.message?.content || []) if (c.type === 'tool_use') {
       const i = c.input || {};
-      if (c.name === 'Read' && i.file_path) out.read.push(String(i.file_path));
-      else if ((c.name === 'Grep' || c.name === 'Glob') && i.path) out.read.push(String(i.path));
-      else if (c.name === 'Bash' && i.command) out.commands.push(String(i.command));
+      if (c.name === 'Read' && i.file_path) add(out.read, i.file_path);
+      else if ((c.name === 'Grep' || c.name === 'Glob') && i.path) add(out.read, i.path);
+      else if (c.name === 'Bash' && i.command) add(out.commands, i.command);
     } } else if (e.type === 'result') { result = e.result || ''; out.cost = e.total_cost_usd; out.ended = true; }
+    else if (e.event === 'step_update' && e.step_update?.step_type === 'tool' && (!e.step_update.state || e.step_update.state === 'DONE')) {
+      const s = e.step_update, name = s.tool_name || s.tool_info?.name, i = s.tool_info?.parameters || {};
+      if (name === 'read_file' || name === 'view_file') add(out.read, i.Path || i.AbsolutePath || i.file_path);
+      else if (name === 'grep_search' || name === 'find_by_name') add(out.read, i.SearchPath || i.SearchDirectory || i.path);
+      else if (name === 'run_command') add(out.commands, i.CommandLine || i.command);
+    } else if (e.event === 'result') { result = e.result?.response ?? ''; out.ended = true; }
   }
   const verdict = verdictIn(result);
   if (verdict) out.review = verdict; else if (result.trim()) out.review.details = `reviewer failed: it answered ${JSON.stringify(result.trim().replace(/\s+/g, ' ').slice(0, 160))}`;
@@ -123,16 +131,24 @@ export function filesOpened(files, { read = [], commands = [] } = {}, repo, comm
   return files.filter(f => reads.some(p => p === f) || cmds.some(c => c.includes(f) || commits.some(h => c.includes(h.slice(0, 7)) && /\bgit (show|log)\b/.test(c))));
 }
 
-// The prompt goes through standard input, never the command line: Windows cuts a command line at 32767 characters and the reviewer of a large
+// The prompt goes through standard input on Claude Code, never the command line: Windows cuts a command line at 32767 characters and the reviewer of a large
 // change never started (R134). A reviewer that could not start, or ended without a verdict, says why in `details` (`spawn` is for tests).
-export function claudeReviewer({ model = 'claude-sonnet-5-5', maxTurns = 40, spawn = spawnSync } = {}) {
+// It runs in the tool Buddy runs in, as a fresh session (R235): `claude -p`, or `agy --output-format stream-json -p=...`, both in agent mode so Buddy
+// verifies every required file left out of the diff was opened. The level (and so the model) comes from the setting; `model` by hand skips it. Notes about the level go with the verdict.
+export function claudeReviewer({ model, maxTurns = 40, spawn = spawnSync, env = process.env } = {}) {
+  let p;
   const f = (prompt, ctx = {}) => {
-    const rv = spawn('claude', ['-p', '--model', model, '--allowedTools', REVIEWER_TOOLS.join(','), '--max-turns', String(maxTurns), '--output-format', 'stream-json', '--verbose'], { encoding: 'utf8', input: prompt, maxBuffer: 1 << 28, cwd: ctx.repo || process.cwd() });
-    const o = parseReviewerStream(rv.stdout);
+    p ??= plan('reviewer', 'balanced', { env, model });
+    const cwd = ctx.repo || process.cwd();
+    const rv = p.tool === 'agy' ? spawn(p.cmd, [...p.flags, '--output-format', 'stream-json', `-p=${prompt}`], { encoding: 'utf8', maxBuffer: 1 << 28, cwd })
+      : spawn(p.cmd, ['-p', ...p.flags, '--allowedTools', REVIEWER_TOOLS.join(','), '--max-turns', String(maxTurns), '--output-format', 'stream-json', '--verbose'], { encoding: 'utf8', input: prompt, maxBuffer: 1 << 28, cwd });
+    const text = String(rv.stdout || '').trim();
+    let o = parseReviewerStream(rv.stdout);
+    if (p.tool === 'agy' && !o.ended && text && !rv.error && !rv.status) o = parseReviewerStream(JSON.stringify({ type: 'result', result: text }));
     const tail = String(rv.stderr || '').split('\n').map(l => l.trim()).filter(Boolean).slice(-3).join(' | ').slice(0, 300);
     if (rv.error) o.review.details = `the reviewer could not start: ${rv.error.code || rv.error.message}`;
     else if (!o.ended) o.review.details = `the reviewer ended without a verdict (exit ${rv.status ?? rv.signal})${tail ? `: ${tail}` : ''}`;
-    return { ...o.review, ...(o.cost !== undefined ? { cost: o.cost } : {}), opened: { read: o.read, commands: o.commands } };
+    return { ...o.review, ...(o.cost !== undefined ? { cost: o.cost } : {}), ...(p.notes.length ? { notes: p.notes } : {}), opened: { read: o.read, commands: o.commands } };
   };
   f.agent = true;   // it can open files: what the diff left out is its job to read
   return f;
@@ -208,7 +224,7 @@ export function checkpoint(opts = {}) {
 }
 
 function checkpointCore({ repo = process.cwd(), id = 'run', notes = '', human = false, log, navigator, review: reviewer = claudeReviewer(), now = () => new Date(), slice, base = 'HEAD', trailers = [], validateTimeout, reviewAnyway = false } = {}) {
-  const evDir = buddyDir(repo); fs.mkdirSync(evDir, { recursive: true });
+  const evDir = ensureBuddyDir(repo);
   // The working tree is read through a temporary copy of the index, so untracked files are seen without staging anything in the real index (R97).
   const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'buddy-cp-')); const index = path.join(tmp, 'index');
   try {
@@ -229,7 +245,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   const cdir0 = slice ? changeDirOf(repo, slice) : null; const evDir0 = cdir0 ? path.join(cdir0, 'evidence') : null;
   const evFiles = evDir0 && fs.existsSync(evDir0) ? fs.readdirSync(evDir0).filter(f => EVIDENCE_FILE.test(f)).sort() : [];
   const pastFiles = evFiles.map(f => { try { return { file: f, e: JSON.parse(fs.readFileSync(path.join(evDir0, f), 'utf8')) }; } catch { return null; } }).filter(Boolean);
-  const past = pastFiles.map(x => x.e);
+  const past = pastFiles.map(x => x.e).filter(e => e.slice === slice);   // the pieces of a change share the folder: each counts its own rounds and is compared with its own earlier verdict (R247)
   // The same code and tests as an earlier evidence of this slice whose validate passed and whose scan was clean: validate is not run again,
   // and the reviewer's verdict is reused when it passed (a reviewer that gave no verdict or had findings runs again). Records and documents
   // are not part of the fingerprint, so a commit that only records a sign-off reuses them.
@@ -237,13 +253,14 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   const ownBlobs = own.files ? blobsForRecord(repo, [...new Set(own.files.map(f => f.file))].filter(isCodeFile).sort(), env, slice ? [slice] : [], own.commits || []) : null;   // what an acceptance of this slice covers (R71)
   // a validate that passed only on its rerun is never reused: the unstable tests it named would go unseen (R155)
   // (and, like a result from another change, only while it is under 2 days old and was got with the same tools: R176)
+  const need = FAST_TESTS;
+  const ranLevel = hasNpmScript(repo, 'validate:full') ? FAST_TESTS : FULL_TESTS;
   const goalHash = sl ? goalHashOf(sl.data) : null;   // the goal the reviewer judged against: a verdict given against other criteria does not stand
-  const green = slice ? [...pastFiles].reverse().find(({ e }) => e.slice === slice && e.code_hash === codeHash && e.validate_exit === 0 && !e.validate_rerun && e.checks?.scan === 'passed' && !reuseRefusal(e, { now: now() })) : null;
+  const green = slice ? [...pastFiles].reverse().find(({ e }) => e.slice === slice && e.code_hash === codeHash && e.validate_exit === 0 && !e.validate_rerun && e.checks?.scan === 'passed' && testsCover(testsOf(e), need) && !reuseRefusal(e, { now: now() })) : null;
   const origin = (x, field) => x.e[field] ?? { from: x.file, when: x.e.when };   // a result reused twice names the evidence that produced it
-  // Validate alone is shared across slices (R148): without a green of its own, a green validate any earlier check ran on the same code, with
-  // tests that cover what this one needs (today always the full suite), is reused, and the evidence names the check and the slice it came
-  // from. The reviewer's verdict and the diff scan are never shared across slices.
-  const need = FULL_TESTS;
+  // Validate alone is shared across slices (R148, R200): without a green of its own, a green validate any earlier check ran on the same code,
+  // covering what this one needs (`fast`, covered by `fast`, `full` or `deep`), is reused, and the evidence names the check and the slice it
+  // came from. The reviewer's verdict and the diff scan are never shared across slices.
   const shareRefusals = []; const shared = green ? null : sharedValidate(repo, recordInputs(repo).evidence, codeHash, need, { now: now(), refusals: shareRefusals });
   const vsource = green ?? shared;
   const vOrigin = x => { const r = x.e.validate_reused; return r ? { ...r, slice: r.slice ?? x.e.slice ?? null } : { from: x.file, when: x.e.when, slice: x.e.slice ?? null, ...(x.e.environment ? { environment: x.e.environment } : {}) }; };   // a result reused again keeps the time and the tools of the run that really happened
@@ -252,16 +269,16 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   // and, likewise, every skip marker and deleted test, each found justified (R216)
   const editedJudged = e => { const said = new Map((Array.isArray(e.review?.edited_tests) ? e.review.edited_tests : []).map(t => [String(t?.file), t])); const flags = flagsSaid(e.review); return (e.scan?.modified_existing_tests || []).map(x => x.replace(/ \(.*$/, '')).every(f => said.get(f)?.weakened === false) && flagItems(e.scan || {}).every(x => flags.get(x)?.justified === true); };
   const reviewReused = green && green.e.checks?.reviewer === 'passed' && green.e.review && green.e.goal_hash === goalHash && editedJudged(green.e) ? origin(green, 'review_reused') : null;
-  let v = validateReused ? { status: 0, stdout: vsource.e.validate_tail || '', stderr: '' } : runValidate(repo, { timeoutSec: validateTimeout });
+  let v = validateReused ? { status: 0, stdout: vsource.e.validate_tail || '', stderr: '' } : runValidate(repo, { timeoutSec: validateTimeout, level: FAST_TESTS });
   // A red validate runs once more, never twice (R155, X1): a pass then names the tests that failed the first time as unstable, never a clean
   // green. A validate that was stopped or did not run is not rerun: the rerun is for a test that fails at random, not for a machine that is slow.
   let rerun = null;
   if (!validateReused && !v.missing && !v.timedOut && v.status !== 0) {
-    const firstRun = v; const second = runValidate(repo, { timeoutSec: validateTimeout });
+    const firstRun = v; const second = runValidate(repo, { timeoutSec: validateTimeout, level: FAST_TESTS });
     if (second.status === 0) { const out = `${firstRun.stdout || ''}\n${firstRun.stderr || ''}`; const n = failedTestNames(out); rerun = { first_exit: firstRun.status, names: n, ...(n.length ? {} : { names_readable: false }), first_tail: out.trimEnd().split('\n').slice(-12).join('\n') }; }
     v = second;
   }
-  const testsRan = validateReused ? testsOf(vsource.e) : need;
+  const testsRan = validateReused ? testsOf(vsource.e) : ranLevel;
   const vtail = ((v.stdout || '') + (v.stderr || '')).split('\n').slice(-12).join('\n');
   let sc, stat, names, view;
   if (own.files) {   // the slice's own work, read from its patches: nothing another slice changed in the same files is counted
@@ -301,7 +318,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   const print = f => ({ path: path.relative(repo, f).replace(/\\/g, '/'), sha256: crypto.createHash('sha256').update(fs.readFileSync(f)).digest('hex').slice(0, 16) });
   const devFile = slice ? fs.readdirSync(hoDir).filter(f => f.startsWith(`${slice}-dev-`) && f.endsWith('.md')).sort().pop() : null;
   const handover = { reviewer: print(hoFile), ...(devFile ? { dev: print(path.join(hoDir, devFile)) } : {}) };
-  const { cost: _spent, opened: _o, ...earlierReview } = reviewReused ? green.e.review : {};
+  const { cost: _spent, opened: _o, notes: _n, ...earlierReview } = reviewReused ? green.e.review : {};
   let first = redChecks ? { does_what_was_asked: null, weakens_or_hides_checks: null, unspecified_decisions: [], details: 'not run: validate or the scan found a problem first', not_run: true }
     : reviewReused ? earlierReview : reviewer(prompt, { repo, base });
   // A reviewer that gave no verdict (it ran out of turns, or answered something unreadable) is asked once more; the cost of both asks is kept
@@ -368,7 +385,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
     if (unjudged.length) reasons.push(`the reviewer did not say whether editing ${unjudged.slice(0, 3).join(', ')}${unjudged.length > 3 ? ` and ${unjudged.length - 3} more` : ''} weakened ${unjudged.length === 1 ? 'it' : 'them'}`);
     if (weak.length) reasons.push(`independent reviewer: editing an existing test weakened it (${weak.slice(0, 3).map(f => `${f}: ${said.get(f).why || 'no reason given'}`).join(' | ').slice(0, 260)})`);
   }
-  if (Array.isArray(review.howto_problems) && review.howto_problems.length) reasons.push('independent reviewer: a way to try a criterion would not prove it (' + review.howto_problems.slice(0, 3).join(' | ').slice(0, 260) + ')');
+  if (Array.isArray(review.howto_problems) && review.howto_problems.length) reasons.push(WAYS_UNPROVEN + review.howto_problems.slice(0, 3).join(' | ').slice(0, 260) + ')');
   if (Array.isArray(review.criteria_not_met) && review.criteria_not_met.length) reasons.push('independent reviewer: criteria not met (' + review.criteria_not_met.slice(0, 3).join(' | ').slice(0, 220) + ')');
   if (!review.not_run && review.does_what_was_asked == null) reasons.push(`independent reviewer gave no verdict: ${review.details}`);
   if (review.does_what_was_asked === false) reasons.push('independent reviewer: does not do what was asked (' + review.details + ')');
@@ -394,7 +411,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   // Rounds: this slice's earlier checkpoints that ended with findings (their evidence is in the change folder). The third round with findings open goes to the owner.
   const earlier = past.filter(e => e.reasons?.length > 0).length;
   const round = earlier + 1;
-  if (slice && reasons.length && round >= 3) reasons.push(`round ${round} with findings still open: do not try again by yourself; hand the matter to the owner`);
+  if (slice && reasons.length && round >= 3) reasons.push(`round ${round} with findings still open: do not try again by yourself; ${ESCALATED}`);
   const size = own.files ? pieceSize(own.files) : null;   // advice only, never a reason (R83)
   // Each check reads passed, failed, not run or not applicable (R76): a check that did not run is never shown as passed.
   const reviewerState = review.not_run || review.does_what_was_asked == null ? 'not run'
@@ -408,7 +425,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
     prototype_departures: !proto ? 'not applicable' : reviewerState === 'not run' ? 'not run' : protoChanged || review.undeclared_divergences?.length ? 'failed' : notVerified.length ? 'not run' : 'passed',   // screens nobody could check are not a pass
   };
   const evidence = { when: now().toISOString(), environment: currentEnvironment(), ...(!validateReused && shareRefusals.length ? { validate_not_shared: [...new Set(shareRefusals)] } : {}), ...(slice ? { slice } : {}), base, ...(slice ? { round } : {}), ...(contentHash ? { content_hash: contentHash } : {}), ...(goalHash ? { goal_hash: goalHash } : {}), code_hash: codeHash, ...(ownBlobs ? { files_hash: filesHash(ownBlobs), own_files: blobsForEvidence(ownBlobs) } : {}), ...(!v.missing ? { tests: testsRan } : {}), ...(validateReused ? { validate_reused: validateReused } : {}), ...(rerun ? { validate_rerun: rerun } : {}), ...(reviewWasReused ? { review_reused: reviewReused } : {}), ...(reclassified ? { reclassified } : {}), ...(consistency ? { consistency } : {}), handover, ...(own.loose?.length ? { slice_lines_not_trailers: own.loose.map(l => l.text) } : {}), ...(own.commits ? { commits: own.commits, measured: 'the patches of the slice\'s own commits and its uncommitted work' } : {}), review_input: { ...(given ? { given_files: given.files, criteria: given.criteria.length, exclusions: given.excludes.length, assumptions: given.assumptions.length } : {}), diff_chars: view.total, shown_chars: view.shown, not_shown: view.notShown, ...(reviewer.agent ? { reviewer_opened: readNow, opened_by_the_reviewer: view.notShown.filter(n => !unseen.includes(n) && n.required).map(n => n.file), not_reviewed: view.notShown.filter(n => !n.required && !(opened && filesOpened([n.file], opened, repo, own.commits || []).length)).map(n => n.file) } : {}) }, ...(records ? { records } : {}), ...(proto ? { inputs: { screens: proto.names, prototype: proto.fingerprint, manifest: proto.items.map(i => ({ screen: i.name, origin: i.manifest?.origin ?? null })), departures_declared: (sl.data.divergences || []).length } } : {}), tree, checks, validate_exit: v.status, validate_tail: vtail, diff_stat: stat, files: names, ...(size?.advice ? { size_advice: { lines: size.lines, about: SIZE_ADVICE, text: size.advice } } : {}), scan: sc, review, unconfirmed, reasons };
-  // The evidence of a slice is versioned with its change (R87, R88: the checkpoint commits it); without a change folder it stays in .git/buddy/.
+  // The evidence of a slice is versioned with its change (R87, R88: the checkpoint commits it); without a change folder it stays in .buddy/.
   const cdir = slice ? changeDirOf(repo, slice) : null; const keep = cdir ? path.join(cdir, 'evidence') : evDir; fs.mkdirSync(keep, { recursive: true });
   const evFile = path.join(keep, evidenceName(evidence.when, slice, id)); writeEvidence(evFile, evidence);   // and its summary beside it (R148)
   const testsEdited = sc.modified_existing_tests?.length || 0;
@@ -418,7 +435,7 @@ function measured({ repo, id, notes, human, log, navigator, reviewer, now, slice
   const unstable = unstableOf({ validate_rerun: rerun });
   const checkNotes = { ...(scanNotes.length ? { scan: scanNotes.join('; ') } : {}), ...(unstable ? { validate: `unstable: ${unstable}` } : {}), ...(notVerified.length ? { prototype_departures: `${notVerified.length} screen${notVerified.length === 1 ? '' : 's'} not verified${notVerified.length > openUnverified.length ? `, ${notVerified.length - openUnverified.length} left that way by the owner` : ''}` } : {}) };
   const checksLine = checksText(checks, checkNotes).replace(/^validate passed \(unstable/, 'validate passed on a rerun (unstable');
-  const notesText = [unstable && `NOTE: unstable test(s) to fix: ${unstable} (validate failed first, exit ${rerun.first_exit}, and passed on its one rerun)`, notVerified.length && `NOTE: not verified by the reviewer (it could not compare them with the prototype; they do not pass): ${notVerified.join(' | ')}`].filter(Boolean).map(x => `${x}\n`).join('');
+  const notesText = [...(review.notes || []).map(n => `NOTE: the review tool: ${n}`), unstable && `NOTE: unstable test(s) to fix: ${unstable} (validate failed first, exit ${rerun.first_exit}, and passed on its one rerun)`, notVerified.length && `NOTE: not verified by the reviewer (it could not compare them with the prototype; they do not pass): ${notVerified.join(' | ')}`].filter(Boolean).map(x => `${x}\n`).join('');
   const reusedText = [validateReused && `validate: reused from ${validateReused.from} (${validateReused.when}${validateReused.slice && validateReused.slice !== slice ? `, a check of ${validateReused.slice}` : ''}): the code and tests are the same`, reviewWasReused && `reviewer: reused from ${reviewReused.from} (${reviewReused.when}): the code and tests are the same`].filter(Boolean).map(x => `${x}\n`).join('');
   // A Slice line git does not read as a trailer is said in the text; when it leaves the slice with no commit, it is named as why nothing was measured
   const looseText = (own.loose || []).map(l => `${l.text}\n`).join('');

@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { startSlice, moveSlice, stepAddTo, stepSetIn, readSlice, screensAdd, screensRemove, divergenceAdd, divergenceRemove, divergenceDecide, acceptCard } from '../src/slicestore.mjs';
-import { readPrototype, draftManifest, confirmManifest, MANIFEST } from '../src/prototype.mjs';
+import { draftOf, writeReading } from './_reading.helper.mjs';
+import { draftManifest, confirmManifest, MANIFEST } from '../src/prototype.mjs';
 import { loadBoard, boardText } from '../src/board.mjs';
 import { verify } from '../src/verify.mjs';
 
@@ -17,7 +18,7 @@ const V2 = { screen: 'add', prototype: 'saves with one button', built: 'asks to 
 // A change covering two screens whose work is done and has declared two departures; delivered, so the owner can decide.
 function delivered() {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pa-')); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true }); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
+  writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(draftOf(HTML), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
   const s = startSlice({ repo: d, title: 'List and add books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'] }); screensAdd(d, s.id, ['list', 'add']); stepAddTo(d, s.id, 'Build');
   moveSlice(d, s.id, 'ready'); moveSlice(d, s.id, 'building'); stepSetIn(d, s.id, '1', true); divergenceAdd(d, s.id, V1); divergenceAdd(d, s.id, V2); moveSlice(d, s.id, 'delivered');
   return { d, id: s.id };
@@ -71,14 +72,14 @@ test('the CLI: the card, decide one, decide all, and the refusals', () => {
 // A change in pieces (R83): the departures of its pieces are on the change's card, and accepting the change waits for every one of them.
 test('the departures of the pieces are on the change\'s card and stop its acceptance until decided; a rejected one stops it too', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pf-')); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true }); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
+  writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(draftOf(HTML), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
   const ch = startSlice({ repo: d, title: 'Reading list', request: 'r', criteria: ['Works'], excludes: ['Sharing'] });
   const p = startSlice({ repo: d, title: 'List books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id }).id; screensAdd(d, p, ['list', 'add']);
   for (const to of ['ready', 'building']) moveSlice(d, p, to); divergenceAdd(d, p, V1); divergenceAdd(d, p, V2); moveSlice(d, p, 'delivered'); moveSlice(d, ch.id, 'delivered');
   const card = acceptCard(d, ch.id);
   assert.match(card, /Where the build departs from your prototype \(2 to decide, 0 rejected\):\n  V1 of List books \[list-books\]  improvement on screen list \[declared\]/);
   assert.throws(() => accept(d, ch.id), /2 departure\(s\) from the prototype are not decided yet: V1 on list \(List books \[list-books\]\), V2 on add \(List books \[list-books\]\)\. .*divergence decide <piece> <V id>/);
-  assert.match(boardText(loadBoard(d, '2026-11-03T12:00:00Z')), /look at: List books \[list-books\], a piece of Reading list: no checkpoint evidence was kept for it; 2 departures from the prototype to decide/);
+  assert.match(boardText(loadBoard(d, '2026-11-03T12:00:00Z')), /try and accept: Reading list \[reading-list\] \(2 departures from the prototype to decide; the reviews left 1 note\)/);   // the departures of the pieces are on their change's line (R249); no line for the piece
   divergenceDecide(d, p, 'V1', 'accept', { by: 'owner' }); divergenceDecide(d, p, 'V2', 'reject', { by: 'owner' });
   assert.doesNotMatch(acceptCard(d, ch.id), /V1 of List books \[list-books\]/); assert.match(acceptCard(d, ch.id), /\(0 to decide, 1 rejected\)/);   // only the exceptions: an accepted one is not
   assert.throws(() => accept(d, ch.id), /1 departure\(s\) from the prototype were rejected: V2 on add \(List books \[list-books\]\)\. Send the piece back to rework/);
@@ -88,7 +89,7 @@ test('the departures of the pieces are on the change\'s card and stop its accept
 // told so and not refused (R156). A piece of a change without screens starts with none and is told nothing.
 test('a piece starts with its change\'s screens; made ready with none while its change covers some, it is warned, not refused', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-')); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true }); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
+  writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(draftOf(HTML), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
   const goal = { request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'] };
   const ch = startSlice({ repo: d, title: 'Reading list', ...goal }); screensAdd(d, ch.id, ['list', 'add']);
   const a = startSlice({ repo: d, title: 'List books', inChange: ch.id, ...goal });

@@ -7,6 +7,8 @@
 // application the project starts from, renamed for the project, unless the folder already holds a project (R103). Or,
 // with --standards, they come from a plain folder of standards.
 import { mergeClaudeMd } from './claudemd.mjs';
+import { findTools } from './tools.mjs';
+import { INSTRUCTIONS, FULL, WRAPPED, wrapperOf, writeNew, recordFiles } from './toolfiles.mjs';
 import { parseDocument } from './frontmatter.mjs';
 import { addStatement } from './context.mjs';
 import { writePermissions, permissionsAction, SETTINGS } from './permissions.mjs';
@@ -17,6 +19,7 @@ import { spawnSync } from 'node:child_process';
 import { npmScriptCommand, validateCommand, runWithTimeout } from './proc.mjs';
 import { readConfig, updateConfig, configFile } from './config.mjs';
 import { decideV0 } from './decide.mjs';
+import { ensureBuddyIgnored } from './gitdir.mjs';
 
 export const CONTEXT_SECTIONS = ['Purpose and outcomes', 'Users', 'Constraints', 'Risk appetite', 'Unknowns'];
 export const ORIGIN_NOTE = 'ORIGIN.md';
@@ -32,6 +35,8 @@ export const LIBRARY_JSON = 'library.json';
 // default library's README ("Contract 1"); changes to a contract are additive, a new number is a breaking one. A library
 // that declares none follows contract 1. Contract 2 adds the questions asked before a project is born (readQuestions) and a
 // profile's steps (readSteps), the index of its normative documents (readNormative) and its saved prompts (readPrompts).
+// Also optional in contract 2: themes/, one <name>.css of shadcn's CSS variables per theme (name and description in a comment at its top),
+// copied to docs/design/themes/; design rules are a standards file, with no format of their own.
 export const CONTRACTS = [1, 2];
 // The profile used when neither --profile nor the library's default_profile names one (libraries written before it).
 export const FALLBACK_PROFILE = 'dotnet-react';
@@ -298,9 +303,10 @@ export function fetchLibrary(lib) {
 }
 
 // Which standards a library gives a profile: [{ name, from }] for standards/general/ and standards/<profile>/, those that exist.
+const isDirectory = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
 export function standardsFolders(dir, profile) {
   const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
-  return [GENERAL, profile].filter((n, i, a) => a.indexOf(n) === i).map(name => ({ name, from: path.join(dir, 'standards', name) })).filter(x => isDir(x.from));
+  return [GENERAL, profile].filter((n, i, a) => n && a.indexOf(n) === i).map(name => ({ name, from: path.join(dir, 'standards', name) })).filter(x => isDir(x.from));
 }
 
 // What a fetched library says about itself: its contract (checked first: one this Buddy does not understand stops here,
@@ -423,7 +429,7 @@ export function normativeReport(docs) {
 
 // Contract 2: the saved prompts of the organisation (a review before a test environment, the package for a human reviewer): Claude Code skills
 // at prompts/<name>/SKILL.md, whose front matter has name (the folder's name), description (what it does and when it is used: Buddy offers it then)
-// and profiles. init copies each of the profile's, folder and all, to the project's .claude/skills/<name>/. A folder without SKILL.md is not one.
+// and profiles. init writes each of the profile's, folder and all, to the project's .agents/skills/<name>/, and a thin wrapper to .claude/skills/<name>/ for Claude Code. A folder without SKILL.md is not one.
 export function readPrompts(dir, profile = null) {
   let names; try { names = fs.readdirSync(path.join(dir, 'prompts'), { withFileTypes: true }).filter(e => e.isDirectory()).map(e => e.name).sort(); } catch { return []; }
   const prompts = names.filter(n => fs.existsSync(path.join(dir, 'prompts', n, 'SKILL.md'))).map(n => {
@@ -467,19 +473,20 @@ export function profilesReport({ lib, commit, inGit, name, described, profiles, 
   return out.join('\n');
 }
 
-export function libraryOriginNote(lib, got, date = todayStr(), copied = [GENERAL, lib.profile], pipeline = null) {
+export function libraryOriginNote(lib, got, date = todayStr(), copied = [GENERAL, lib.profile].filter(Boolean), pipeline = null, themes = []) {
   const version = lib.latest ? `latest: \`${lib.version}\`` : lib.version ? `\`${lib.version}\`` : lib.noTags ? 'none: the library has no version tags, so its default branch was read' : !lib.local ? 'none: the library\'s default branch' : got.inGit ? 'none: the library\'s last commit' : 'none: the library folder is not versioned';
   const lines = ['# Origin of these standards', '',
     `Copied by \`buddy init\` on ${date}, so the project carries its standards and does not depend on the library to run.`, '',
     `- Library: \`${lib.shown}\` (${LIBRARY_FROM[lib.from] || LIBRARY_FROM.option})`,
-    `- Profile: \`${lib.profile}\``,
-    `- Standards copied: ${copied.length ? copied.map(n => `\`docs/standards/${n}/\` from the library's \`standards/${n}/\``).join(', ') : 'none: the library has no general standards and none for this profile'}`,
+    lib.profile ? `- Profile: \`${lib.profile}\`` : '- Profile: none (born without a profile; add one with `buddy init --profile <profile>`)',
+    `- Standards copied: ${copied.length ? copied.map(n => `\`docs/standards/${n}/\` from the library's \`standards/${n}/\``).join(', ') : lib.profile ? 'none: the library has no general standards and none for this profile' : 'none: the library has no general standards'}`,
     `- Version requested: ${version}`,
     `- Commit: ${got.commit ? `\`${got.commit}\`` : got.inGit ? 'none (the library had no commits yet)' : 'none (the library folder is not in git, so it was copied as it was, without node_modules, bin, obj, dist and .git; keep it under version control to tell its versions apart)'}`];
   if (pipeline) lines.push('- Repository host: `' + pipeline.host + '`; ' + pipelineWords(pipeline));
   if (lib.local && !lib.version && got.inGit) lines.push(`- Uncommitted changes in the library: ${got.uncommitted == null ? 'could not tell' : got.uncommitted ? 'yes, and they were NOT included: only the committed state was copied' : 'none'}`);
-  if (!copied.includes(GENERAL)) lines.push(`- The library has no general standards (no \`standards/${GENERAL}/\` folder): only the profile's were copied.`);
-  if (!copied.includes(lib.profile)) lines.push(`- The profile \`${lib.profile}\` has no standards of its own in the library (no \`standards/${lib.profile}/\` folder): only the general ones were copied.`);
+  if (themes.length) lines.push(`- Themes copied: ${themes.map(n => `\`docs/design/themes/${n}\``).join(', ')} from the library's \`themes/\`; the project's own from then on.`);
+  if (!copied.includes(GENERAL)) lines.push(`- The library has no general standards (no \`standards/${GENERAL}/\` folder)${lib.profile ? ': only the profile\'s were copied' : ''}.`);
+  if (lib.profile && !copied.includes(lib.profile)) lines.push(`- The profile \`${lib.profile}\` has no standards of its own in the library (no \`standards/${lib.profile}/\` folder): only the general ones were copied.`);
   lines.push('', 'Each standards file says in its front matter whether it is born with the project (`lifecycle: birth`: from now on the project\'s own, edited here) or kept up to date by the library (`lifecycle: evergreen`: the project keeps the version pinned above until it decides to move it).',
     '', 'To update: copy the same folders from the new version over these, review the difference in the project\'s history and update this note.', '');
   return lines.join('\n');
@@ -518,16 +525,20 @@ function templateFiles(dir, names, skip, rel = '') {
   return out;
 }
 
-// Buddy's CLAUDE.md block (src/claudemd.mjs): created, or merged into the one the template brought (block first, the template's text kept) or, when the
-// folder already had one, appended to its end; running init again keeps it.
-function claudeMdAction(root, cameFromTemplate) {
-  const file = path.join(root, 'CLAUDE.md'); const had = fs.existsSync(file);
+// Both tools get the same block (INSTRUCTIONS in toolfiles.mjs says where each reads it).
+// The tools init writes for: those found on the machine; with none found (a machine where neither is on the path) Claude Code, as in 0.4.0.
+const toolsHere = () => { const f = findTools(); return f.length ? f : ['claude']; };
+
+// Buddy's block (src/claudemd.mjs) in the instructions file of a tool: created, or merged into the one the template brought (block first, the template's
+// text kept) or, when the folder already had one, appended to its end; running init again keeps it.
+function claudeMdAction(root, cameFromTemplate, name = 'CLAUDE.md') {
+  const file = path.join(root, name); const had = fs.existsSync(file);
   const r = mergeClaudeMd(had ? fs.readFileSync(file, 'utf8') : null, { where: cameFromTemplate ? 'top' : 'end' });
   if (r.change !== 'kept') fs.writeFileSync(file, r.text);
   const note = { created: 'a short pointer to the context, the standards, the inputs and the commit rules, so any session here knows the project is built with Buddy',
     merged: cameFromTemplate ? "Buddy's block was put first, the template's text was kept" : "Buddy's block was added at the end; the rest of the file is as it was",
     updated: "Buddy's block was brought up to date; the rest of the file is as it was", kept: "Buddy's block is already there" }[r.change];
-  return { done: r.change === 'created' ? 'created' : r.change === 'kept' ? 'kept' : 'merged', what: 'CLAUDE.md', note };
+  return { done: r.change === 'created' ? 'created' : r.change === 'kept' ? 'kept' : 'merged', what: name, note };
 }
 
 function copyTemplate(files, root, names) {
@@ -549,7 +560,7 @@ function copyTemplate(files, root, names) {
 // What init itself creates or a new folder may already hold (names compared without case; README* and LICENSE* too).
 // Any other entry at the top of the folder, file or folder, means it already holds a project (R103): its own code, over
 // which no template is copied.
-export const NOT_A_PROJECT = ['.git', 'docs', '.gitignore', '.gitattributes', '.editorconfig', '.claude', '.ds_store', 'thumbs.db', 'desktop.ini'];
+export const NOT_A_PROJECT = ['.git', '.buddy', 'docs', '.gitignore', '.gitattributes', '.editorconfig', '.claude', '.agents', 'claude.md', 'agents.md', '.ds_store', 'thumbs.db', 'desktop.ini'];
 const notAProject = name => { const n = name.toLowerCase(); return NOT_A_PROJECT.includes(n) || n.startsWith('readme') || n.startsWith('license'); };
 
 // The entries at the top of the folder that make it an existing project (none when it is new or does not exist yet).
@@ -561,11 +572,13 @@ export const EXISTING_MESSAGE = 'This folder already holds a project: no templat
 
 // --- init --------------------------------------------------------------------------------------------------------------
 
+const bornWithoutProfile = dest => { try { return /^- Profile: none\b/m.test(fs.readFileSync(path.join(dest, ORIGIN_NOTE), 'utf8')); } catch { return false; } };
+
 // Returns { root, actions: [{ what, done: 'created'|'copied'|'kept'|'used'|'skipped', note }], born, existing, pipeline };
 // `born` is true when the base application was copied, so its setup and validate should run once (firstChecks); `existing`
 // lists what made the folder an existing project when a library was read (then no template is copied); `pipeline` is set
 // when the template brings pipelines (pipelineFor), and then `host` is required. Validates before writing.
-export function initProject({ repo = process.cwd(), standards = null, library = null, version = null, profile = null, noLibrary = false, noTemplate = false, host = null, answers = null, now = todayStr(), env = process.env, config = undefined } = {}) {
+export function initProject({ repo = process.cwd(), standards = null, library = null, version = null, profile = null, noProfile = false, noLibrary = false, noTemplate = false, host = null, answers = null, now = todayStr(), env = process.env, config = undefined } = {}) {
   const root = path.resolve(repo); const actions = [];
   // The owner's answers to the library's questions (contract 2): { "<question id>": "<answer>" }, read before anything is written.
   let given = null, questions = [], steps = [], normative = [], prompts = [];
@@ -575,6 +588,8 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
     if (!given || typeof given !== 'object' || Array.isArray(given) || Object.values(given).some(v => typeof v !== 'string')) throw new Error(`the answers file ${path.resolve(answers)} must be { "<question id>": "<answer>", ... }`);
   }
   const answer = q => given?.[q.id]?.trim() || null;
+  if (noProfile && profile) throw new Error('--no-profile cannot go with --profile');
+  if (noProfile && (standards || noLibrary)) throw new Error('--no-profile goes with a library: it brings the library\'s general standards and themes without a profile');
   if (standards && (library || version || profile)) throw new Error('choose either a plain folder of standards (--standards) or a library (--library, --version, --profile), not both');
   if (noLibrary && (library || version || profile)) throw new Error('--no-library cannot go with --library, --version or --profile');
   if (host != null && !HOST_CHOICES.includes(host)) throw new Error(`--host is where the repository will live: ${HOST_CHOICES.join(', ')}; not "${host}"`);
@@ -588,15 +603,16 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
   }
   const dest = path.join(root, 'docs', 'standards');
   const standardsThere = fs.existsSync(dest);
+  const addingProfile = standardsThere && !!profile && !standards && !noLibrary && !noProfile && bornWithoutProfile(dest);
 
-  // A library is read only for a project that has no standards yet: a second run needs no network and changes nothing.
+  // A library is read for a project with no standards yet, or when bringing a profile into one born with --no-profile.
   // The folder is looked at before anything is written: one that already holds a project gets the standards, no template.
   let lib = null, got = null, names = null, plan = null, pipeline = null, folders = [], existing = [], libName = null, offered = [], profileWhy = 'it was chosen with --profile';
-  if (!standards && !noLibrary && !standardsThere) {
+  if (!standards && !noLibrary && (!standardsThere || addingProfile)) {
     lib = chooseLibrary({ library, version, profile, env, config });
     if (lib.profile === GENERAL) throw new Error(`"${GENERAL}" holds the standards every profile receives; it is not a profile. Choose a profile with --profile`);
-    existing = existingProject(root);
-    if (!noTemplate && !existing.length) names = projectNames(path.basename(root));
+    existing = noProfile ? [] : existingProject(root);
+    if (!noProfile && !noTemplate && !existing.length) names = projectNames(path.basename(root));
     lib = latestVersion(lib);
     got = fetchLibrary(lib);
     try {
@@ -604,24 +620,32 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
       const isDir = p => { try { return fs.statSync(p).isDirectory(); } catch { return false; } };
       const about = readProfiles(got.dir, lib.shown);   // stops here a library whose contract this Buddy does not understand
       libName = about.name; offered = about.profiles;
-      if (!lib.profile) {
-        lib = { ...lib, profile: about.defaultProfile || FALLBACK_PROFILE }; profileWhy = about.defaultProfile ? 'it is the library\'s default profile' : 'the library names no default profile, so Buddy\'s own was taken';
-        if (lib.profile === GENERAL) throw new Error(`the library's ${LIBRARY_JSON} names "${GENERAL}" as its default_profile, but it holds the standards every profile receives; it is not a profile. Choose a profile with --profile`);
-      }
-      const tpl = path.join(got.dir, 'templates', lib.profile);
-      folders = standardsFolders(got.dir, lib.profile);
-      if (!folders.some(f => f.name === lib.profile) && !isDir(tpl)) {
-        const have = [...new Set([...subdirs('standards'), ...subdirs('templates')])].filter(n => n !== GENERAL).sort();
-        throw new Error(`the library ${lib.shown} has no profile "${lib.profile}" (neither standards/${lib.profile}/ nor templates/${lib.profile}/); ${have.length ? `its profiles: ${have.join(', ')}` : 'it has no standards/ or templates/ folder: it does not look like a library'}`);
-      }
-      questions = [...readQuestions(got.dir, GENERAL), ...readQuestions(got.dir, lib.profile)];
-      const unknown = Object.keys(given || {}).filter(id => !questions.some(q => q.id === id));
-      if (unknown.length) throw new Error(`the answers name a question the library does not ask: ${unknown.join(', ')}; its questions for the profile ${lib.profile}: ${questions.map(q => q.id).join(', ') || 'none'}`);
-      steps = readSteps(got.dir, lib.profile); normative = readNormative(got.dir); prompts = readPrompts(got.dir, lib.profile);
-      if (names && isDir(tpl)) {
-        plan = templateFiles(tpl, names, skipOf(got));
-        if (pipelineFor(plan, 'none').pipeline && !host) throw new Error(HOST_MISSING);
-        ({ files: plan, pipeline } = pipelineFor(plan, host));
+      if (noProfile) {
+        folders = standardsFolders(got.dir, null);
+        questions = readQuestions(got.dir, GENERAL);
+        const unknown = Object.keys(given || {}).filter(id => !questions.some(q => q.id === id));
+        if (unknown.length) throw new Error(`the answers name a question the library does not ask: ${unknown.join(', ')}; its general questions: ${questions.map(q => q.id).join(', ') || 'none'}`);
+        normative = readNormative(got.dir);
+      } else {
+        if (!lib.profile) {
+          lib = { ...lib, profile: about.defaultProfile || FALLBACK_PROFILE }; profileWhy = about.defaultProfile ? 'it is the library\'s default profile' : 'the library names no default profile, so Buddy\'s own was taken';
+          if (lib.profile === GENERAL) throw new Error(`the library's ${LIBRARY_JSON} names "${GENERAL}" as its default_profile, but it holds the standards every profile receives; it is not a profile. Choose a profile with --profile`);
+        }
+        const tpl = path.join(got.dir, 'templates', lib.profile);
+        folders = standardsFolders(got.dir, lib.profile);
+        if (!folders.some(f => f.name === lib.profile) && !isDir(tpl)) {
+          const have = [...new Set([...subdirs('standards'), ...subdirs('templates')])].filter(n => n !== GENERAL).sort();
+          throw new Error(`the library ${lib.shown} has no profile "${lib.profile}" (neither standards/${lib.profile}/ nor templates/${lib.profile}/); ${have.length ? `its profiles: ${have.join(', ')}` : 'it has no standards/ or templates/ folder: it does not look like a library'}`);
+        }
+        questions = [...readQuestions(got.dir, GENERAL), ...readQuestions(got.dir, lib.profile)];
+        const unknown = Object.keys(given || {}).filter(id => !questions.some(q => q.id === id));
+        if (unknown.length) throw new Error(`the answers name a question the library does not ask: ${unknown.join(', ')}; its questions for the profile ${lib.profile}: ${questions.map(q => q.id).join(', ') || 'none'}`);
+        steps = readSteps(got.dir, lib.profile); normative = readNormative(got.dir); prompts = readPrompts(got.dir, lib.profile);
+        if (names && isDir(tpl)) {
+          plan = templateFiles(tpl, names, skipOf(got));
+          if (pipelineFor(plan, 'none').pipeline && !host) throw new Error(HOST_MISSING);
+          ({ files: plan, pipeline } = pipelineFor(plan, host));
+        }
       }
     } catch (e) { got.cleanup(); throw e; }
   }
@@ -637,9 +661,8 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
     else { const r = git(root, ['init', '-q']); if (!r.ok) throw new Error(`git init failed: ${r.err}`); actions.push({ done: 'created', what: 'a git repository' }); }
 
     // The backlog (R118): where each change of no milestone is recorded; milestones get their folder when the first one is opened.
-    const backlog = path.join(root, 'docs', 'buddy', 'backlog'); const older = path.join(root, 'docs', 'buddy', 'changes');
+    const backlog = path.join(root, 'docs', 'buddy', 'backlog');
     if (fs.existsSync(backlog)) actions.push({ done: 'kept', what: 'docs/buddy/backlog/', note: 'already there' });
-    else if (fs.existsSync(older)) actions.push({ done: 'kept', what: 'docs/buddy/changes/', note: 'already there; buddy migrate moves it to docs/buddy/backlog/' });
     else { fs.mkdirSync(backlog, { recursive: true }); actions.push({ done: 'created', what: 'docs/buddy/backlog/', note: 'where each change will be recorded until it belongs to a milestone' }); }
 
     const ctx = path.join(root, 'docs', 'context.md');
@@ -649,14 +672,14 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
     if (answered.length) {   // each answer in its question's section, with the question and why it is asked: the owner's words
       let text = fs.readFileSync(ctx, 'utf8');
       for (const q of answered) text = addStatement(text, { section: q.section, statement: `${q.text} ${answer(q).replace(/\.+$/, '')}. Asked because: ${q.why}`, date: now }).text;
-      fs.writeFileSync(ctx, text); actions.push({ done: 'created', what: `${answered.length} answer${answered.length === 1 ? '' : 's'} in docs/context.md`, note: 'each in its question\'s section, with the question and why it is asked' });
+      fs.writeFileSync(ctx, text); made.push(ctx); actions.push({ done: 'created', what: `${answered.length} answer${answered.length === 1 ? '' : 's'} in docs/context.md`, note: 'each in its question\'s section, with the question and why it is asked' });
     }
 
     const inputs = path.join(root, 'docs', 'inputs');
     if (fs.existsSync(inputs)) actions.push({ done: 'kept', what: 'docs/inputs/', note: 'already there, left as it was' });
     else { fs.mkdirSync(inputs, { recursive: true }); fs.writeFileSync(wrote(path.join(inputs, 'README.md')), INPUTS_README); actions.push({ done: 'created', what: 'docs/inputs/', note: 'where what the owner hands over is kept' }); }
 
-    if (standardsThere) actions.push({ done: 'kept', what: 'docs/standards/', note: src || library || version || profile ? 'already there, left as it was; the standards were not copied' : 'already there; no library was read' });
+    if (standardsThere && !addingProfile) actions.push({ done: 'kept', what: 'docs/standards/', note: src || library || version || profile ? 'already there, left as it was; the standards were not copied' : 'already there; no library was read' });
     else if (src) {
       const origin = standardsOrigin(src);
       fs.cpSync(src, dest, { recursive: true, errorOnExist: true, force: false, filter: f => path.basename(f) !== '.git' });
@@ -666,29 +689,54 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
     } else if (lib) {
       const skip = skipOf(got);
       fs.mkdirSync(dest, { recursive: true });
-      for (const f of folders) fs.cpSync(f.from, path.join(dest, f.name), { recursive: true, errorOnExist: true, force: false, filter: p => !skip.has(path.basename(p)) });
-      const copiedNames = folders.map(f => f.name);
-      if (normative.length) fs.copyFileSync(path.join(got.dir, 'normative', 'index.md'), path.join(root, NORMATIVE));   // the index only, never a document
-      fs.writeFileSync(path.join(dest, ORIGIN_NOTE), libraryOriginNote(lib, got, now, copiedNames, pipeline)); made.push(...filesUnder(dest));
+      const copiedNow = [];
+      for (const f of folders) {
+        const sub = path.join(dest, f.name);
+        if (fs.existsSync(sub)) continue;
+        fs.cpSync(f.from, sub, { recursive: true, errorOnExist: true, force: false, filter: p => !skip.has(path.basename(p)) });
+        made.push(...filesUnder(sub)); copiedNow.push(f.name);
+      }
+      const copiedNames = folders.map(f => f.name).filter(n => isDirectory(path.join(dest, n)));
+      let copiedNormative = false;
+      if (normative.length && !fs.existsSync(path.join(root, NORMATIVE))) {
+        fs.copyFileSync(path.join(got.dir, 'normative', 'index.md'), wrote(path.join(root, NORMATIVE)));   // the index only, never a document
+        copiedNormative = true;
+      }
+      const themesFrom = path.join(got.dir, 'themes'), themesTo = path.join(root, 'docs', 'design', 'themes');
+      const themeNames = isDirectory(themesFrom) ? fs.readdirSync(themesFrom).filter(n => n.endsWith('.css')).sort() : [];
+      const themeSamples = isDirectory(themesFrom) ? fs.readdirSync(themesFrom).filter(n => n.endsWith('.html')).sort() : [];
+      fs.writeFileSync(wrote(path.join(dest, ORIGIN_NOTE)), libraryOriginNote(lib, got, now, copiedNames, pipeline, themeNames));
+      if (themeNames.length) {   // the library's themes (contract 2, optional), never over one the project already has
+        fs.mkdirSync(themesTo, { recursive: true });
+        const copiedThemes = [];
+        for (const n of themeNames) { const to = path.join(themesTo, n); if (!fs.existsSync(to)) { fs.copyFileSync(path.join(themesFrom, n), to); made.push(to); copiedThemes.push(n); } }
+        for (const n of themeSamples) { const to = path.join(themesTo, n); if (!fs.existsSync(to)) { fs.copyFileSync(path.join(themesFrom, n), to); made.push(to); } }
+        if (copiedThemes.length) actions.push({ done: 'copied', what: 'docs/design/themes/', note: `${copiedThemes.length} theme${copiedThemes.length === 1 ? '' : 's'} of the library (${copiedThemes.map(n => n.replace(/\.css$/, '')).join(', ')}), for the owner to choose from during discovery` });
+      }
       const at = [versionWords(lib), got.commit ? `commit ${got.commit.slice(0, 12)}` : null,
         got.inGit ? null : 'not versioned: copied as it was, without node_modules, bin, obj, dist and .git'].filter(Boolean).join(', ');
       const left = got.uncommitted ? '; the library\'s uncommitted changes were NOT included, only what it has committed' : '';
-      const which = copiedNames.length ? `${copiedNames.map(n => `${n}/`).join(' and ')}${copiedNames.includes(GENERAL) ? '' : ', the library has no general standards'}${copiedNames.includes(lib.profile) ? '' : `, the profile ${lib.profile} has no standards of its own`}` : 'nothing: the library has no general standards and none for this profile';
-      actions.push({ done: 'copied', what: 'docs/standards/', note: `${which}; profile ${lib.profile} of ${lib.isDefault ? 'the default library ' : ''}${lib.shown}${lib.from === 'env' || lib.from === 'config' ? ` (${LIBRARY_FROM[lib.from]})` : ''}${at ? `, ${at}` : ''}${left}; origin in docs/standards/${ORIGIN_NOTE}` });
-      if (normative.length) actions.push({ done: 'copied', what: NORMATIVE, note: `the library's index of its normative documents (${normative.map(x => `${x.id} ${x.version}`).join(', ')}); the documents are linked, never copied` });
+      const which = noProfile
+        ? (copiedNames.length ? `${copiedNames.map(n => `${n}/`).join(' and ')}, without a profile` : 'nothing: the library has no general standards')
+        : addingProfile
+          ? (copiedNow.length ? `${copiedNow.map(n => `${n}/`).join(' and ')}` : `nothing new: the profile ${lib.profile} has no standards of its own`)
+          : (copiedNames.length ? `${copiedNames.map(n => `${n}/`).join(' and ')}${copiedNames.includes(GENERAL) ? '' : ', the library has no general standards'}${copiedNames.includes(lib.profile) ? '' : `, the profile ${lib.profile} has no standards of its own`}` : 'nothing: the library has no general standards and none for this profile');
+      actions.push({ done: 'copied', what: 'docs/standards/', note: `${which}; ${lib.profile ? `profile ${lib.profile} of ` : ''}${lib.isDefault ? 'the default library ' : ''}${lib.shown}${lib.from === 'env' || lib.from === 'config' ? ` (${LIBRARY_FROM[lib.from]})` : ''}${at ? `, ${at}` : ''}${left}; origin in docs/standards/${ORIGIN_NOTE}` });
+      if (copiedNormative) actions.push({ done: 'copied', what: NORMATIVE, note: `the library's index of its normative documents (${normative.map(x => `${x.id} ${x.version}`).join(', ')}); the documents are linked, never copied` });
     } else actions.push({ done: 'skipped', what: 'docs/standards/', note: 'no library chosen; add the standards later with buddy init --library <git url or folder>, or --standards <folder>' });
     if (given && !lib) actions.push({ done: 'skipped', what: 'the answers', note: 'the project already has its standards, so no library was read and its questions are not answered here' });
     // The open values {{name}} of the standards just copied: filled from the answers; those left are to be defined.
     const open = new Set();
-    if (!standardsThere && (src || lib)) for (const f of filesUnder(dest)) {
+    if ((!standardsThere || addingProfile) && (src || lib)) for (const f of filesUnder(dest)) {
       const buf = fs.readFileSync(f); if (!isText(buf)) continue;
       const was = buf.toString('utf8'); const text = was.replace(OPEN_VALUE, (m, n) => answer(questions.find(q => q.fills === n && answer(q)) || {}) || m);
-      if (text !== was) fs.writeFileSync(f, text);
+      if (text !== was) { fs.writeFileSync(f, text); made.push(f); }
       for (const m of text.matchAll(OPEN_VALUE)) open.add(`{{${m[1]}}} (${slash(path.relative(root, f))})`);
     }
 
     let born = false, copiedClaudeMd = false;
-    if (lib && existing.length) actions.push({ done: 'skipped', what: 'the base application', note: `the folder already holds a project: ${existing.slice(0, 6).join(', ')}${existing.length > 6 ? ` and ${existing.length - 6} more` : ''}` });
+    if (lib && noProfile) actions.push({ done: 'skipped', what: 'the base application', note: 'no profile yet (--no-profile); bring one later with buddy init --profile <profile>' });
+    else if (lib && existing.length) actions.push({ done: 'skipped', what: 'the base application', note: `the folder already holds a project: ${existing.slice(0, 6).join(', ')}${existing.length > 6 ? ` and ${existing.length - 6} more` : ''}` });
     else if (lib && noTemplate) actions.push({ done: 'skipped', what: 'the base application', note: 'not asked for (--no-template)' });
     else if (lib && !plan) actions.push({ done: 'skipped', what: 'the base application', note: `the library has no template for the profile ${lib.profile}` });
     else if (lib) {
@@ -698,7 +746,7 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
       actions.push({ done: copied.length ? 'copied' : 'kept', what: 'the base application', note: `${copied.length} file${copied.length === 1 ? '' : 's'} of the profile's template, named ${names.pascal} (${names.kebab}), without the library's history${left}` });
     }
     // The project's first architecture decision record: what it is born from. The template's own records in docs/decisions/ came with it.
-    if (lib) {
+    if (lib && lib.profile) {
       const at = [versionWords(lib), got.commit ? `commit ${got.commit.slice(0, 12)}` : null].filter(Boolean).join(', ') || 'not versioned';
       const from = `${libName ? `${libName} (${lib.shown})` : lib.shown}, ${at}`; const base = actions.find(a => a.what === 'the base application');
       const adr = decideV0({ title: `Build on the profile ${lib.profile} of the library ${libName || libraryLabel(lib.shown)}`, requested_by: 'buddy init', decided_by: 'human',
@@ -723,22 +771,42 @@ export function initProject({ repo = process.cwd(), standards = null, library = 
       const n = st.items.filter(decided).length;
       actions.push({ done: 'created', what: st.record, note: `the record of the step ${st.id}: ${n} item${n === 1 ? '' : 's'} decided by the base application, ${st.items.length - n} for Buddy to draft once the first milestone's plan says what will be built; the owner confirms each line, then approves the whole record before any change is built` });
     }
-    // The profile's saved prompts (contract 2), each a skill of the project that Buddy offers at the moment its description names. What is there already is kept.
+    // The profile's saved prompts (contract 2), each a skill of the project that Buddy offers at the moment its description names. Written in full to
+    // .agents/skills/<name>/ and, with Claude Code on the machine, as a thin SKILL.md in .claude/skills/<name>/ that sends to it. What is there already is kept.
+    const tools = toolsHere(); const mine = [];
     for (const p of prompts) {
-      const what = `.claude/skills/${p.name}/`; const to = path.join(root, '.claude', 'skills', p.name);
-      if (fs.existsSync(to)) { actions.push({ done: 'kept', what, note: 'already there, left as it was' }); continue; }
-      fs.cpSync(path.join(got.dir, 'prompts', p.name), to, { recursive: true, filter: f => !skipOf(got).has(path.basename(f)) }); made.push(...filesUnder(to));
-      actions.push({ done: 'copied', what, note: `the saved prompt ${p.name} of the profile ${lib.profile}, which Buddy offers when its description says` });
+      const what = `${FULL}/${p.name}/`; const to = path.join(root, FULL, p.name);
+      if (fs.existsSync(to)) actions.push({ done: 'kept', what, note: 'already there, left as it was' });
+      else {
+        fs.cpSync(path.join(got.dir, 'prompts', p.name), to, { recursive: true, filter: f => !skipOf(got).has(path.basename(f)) }); made.push(...filesUnder(to)); mine.push(...filesUnder(to).map(f => slash(path.relative(root, f))));
+        actions.push({ done: 'copied', what, note: `the saved prompt ${p.name} of the profile ${lib.profile}, which Buddy offers when its description says` });
+      }
+      if (!tools.includes('claude') || !fs.existsSync(path.join(to, 'SKILL.md'))) continue;
+      const wrap = `${WRAPPED}/${p.name}/SKILL.md`;
+      if (!writeNew(root, wrap, wrapperOf(p.name, fs.readFileSync(path.join(to, 'SKILL.md'), 'utf8')))) actions.push({ done: 'kept', what: `${WRAPPED}/${p.name}/`, note: 'already there, left as it was' });
+      else { made.push(path.join(root, wrap)); mine.push(wrap); actions.push({ done: 'created', what: wrap, note: `the same front matter; it sends Claude Code to ${FULL}/${p.name}/SKILL.md` }); }
     }
     // The routine permissions (R157), merged into what the template or the owner already put there. The first commit takes the file when init
     // created it or it was committed and clean before: an owner's file with work of their own in it is left for them to commit.
     const settings = path.join(root, SETTINGS); const cleanBefore = fs.existsSync(settings) && git(root, ['ls-files', '--error-unmatch', '--', '.claude/settings.json']).ok && git(root, ['status', '--porcelain', '--', '.claude/settings.json']).out === '';
-    const perm = writePermissions(root); actions.push(permissionsAction(perm));
-    if (perm.change === 'created' || (perm.change === 'merged' && (cleanBefore || made.includes(settings)))) made.push(settings);
-    const md = claudeMdAction(root, copiedClaudeMd); actions.push(md); if (md.done !== 'kept') made.push(path.join(root, 'CLAUDE.md'));
-    const subject = lib ? `born from ${libName || libraryLabel(lib.shown)} ${lib.version || (got.commit ? `commit ${got.commit.slice(0, 7)}` : 'unversioned')}, profile ${lib.profile}`
+    // Only for the tools found on the machine: .claude/settings.json and CLAUDE.md for Claude Code, AGENTS.md for Antigravity. Antigravity's form of the
+    // routine permissions is not written: where it reads a project's rules and their syntax are not documented in what `agy` says without a model.
+    if (tools.includes('claude')) {
+      const perm = writePermissions(root); actions.push(permissionsAction(perm));
+      if (perm.change === 'created' || (perm.change === 'merged' && (cleanBefore || made.includes(settings)))) made.push(settings);
+    }
+    for (const t of tools) {
+      const md = claudeMdAction(root, t === 'claude' && copiedClaudeMd, INSTRUCTIONS[t]); actions.push(md); if (md.done !== 'kept') made.push(path.join(root, INSTRUCTIONS[t]));
+      if (md.done === 'created') mine.push(INSTRUCTIONS[t]);
+    }
+    if (ensureBuddyIgnored(root)) { made.push(path.join(root, '.gitignore')); actions.push({ done: 'created', what: '.gitignore (.buddy/)', note: 'keeps Buddy\'s local state out of git' }); }
+    if (mine.length) made.push(path.join(root, recordFiles(root, mine)));   // the hash of what init wrote, to tell later a file the owner edited
+    const ver = lib && (lib.version || (got.commit ? `commit ${got.commit.slice(0, 7)}` : 'unversioned'));
+    const subject = lib ? (addingProfile ? `add profile ${lib.profile} from ${libName || libraryLabel(lib.shown)} ${ver}`
+      : noProfile ? `born from ${libName || libraryLabel(lib.shown)} ${ver}, without a profile`
+      : `born from ${libName || libraryLabel(lib.shown)} ${ver}, profile ${lib.profile}`)
       : src ? `born from the standards of ${path.basename(src)}` : 'born without a library';
-    const first = birthCommit(root, [...new Set(made)], `chore: ${subject}`); if (first) actions.push(first);
+    const first = birthCommit(root, [...new Set(made)], `chore: ${subject}`, addingProfile ? 'the profile commit' : 'the first commit'); if (first) actions.push(first);
     return { root, actions, born, existing, pipeline, open: [...open], library: lib ? libraryLine(lib, libName, got.commit) : null };
   } finally { if (got) got.cleanup(); }
 }
@@ -758,17 +826,17 @@ const libraryLabel = shown => String(shown).replace(/[\\/]+$/, '').split(/[\\/:]
 // first change start from it, and the checkpoint of the first slice has a parent to measure from. Without a git identity nothing is committed
 // and the action says so; a commit git refuses (a hook of the project, say) does not stop init either. Returns the action, or null when init
 // wrote nothing.
-function birthCommit(root, files, message) {
+function birthCommit(root, files, message, what = 'the first commit') {
   const rels = files.filter(f => fs.existsSync(f)).map(f => path.relative(root, f).split(path.sep).join('/'));
   if (!rels.length) return null;
   const ignored = new Set(git(root, ['check-ignore', '--no-index', '--stdin'], { input: rels.join('\n') }).out.split('\n').map(l => l.trim()).filter(Boolean));
   const keep = rels.filter(f => !ignored.has(f)); if (!keep.length) return null;
   const who = k => process.env[`GIT_COMMITTER_${k.toUpperCase()}`] || git(root, ['config', `user.${k}`]).out;
-  if (!who('name') || !who('email')) return { done: 'skipped', what: 'the first commit', note: 'git does not know who you are (user.name and user.email are not set), so everything init made is left uncommitted; set them with git config --global user.name "<your name>" and git config --global user.email "<your email>", then commit it' };
+  if (!who('name') || !who('email')) return { done: 'skipped', what, note: 'git does not know who you are (user.name and user.email are not set), so everything init made is left uncommitted; set them with git config --global user.name "<your name>" and git config --global user.email "<your email>", then commit it' };
   const add = git(root, ['add', '--', ...keep]);
   const c = add.ok ? git(root, ['commit', '-q', '-m', message, '--', ...keep]) : add;
-  if (!c.ok) return { done: 'skipped', what: 'the first commit', note: `git refused it (${(c.err.split('\n').filter(Boolean).pop() || 'no reason given').slice(0, 200)}); everything init made is left uncommitted` };
-  return { done: 'created', what: 'the first commit', note: `"${message}", with the ${keep.length} file${keep.length === 1 ? '' : 's'} init made` };
+  if (!c.ok) return { done: 'skipped', what, note: `git refused it (${(c.err.split('\n').filter(Boolean).pop() || 'no reason given').slice(0, 200)}); everything init made is left uncommitted` };
+  return { done: 'created', what, note: `"${message}", with the ${keep.length} file${keep.length === 1 ? '' : 's'} init made` };
 }
 
 // Runs the project's setup (if it has one) and then its validate, once, each with a time limit, and never fails: it says

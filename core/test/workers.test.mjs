@@ -22,7 +22,7 @@ test('register, see, finish: one record per worker, folded from an append-only l
   const w = workers(d, { slice: S, now: at(12) }); const dev = w.find(x => x.id === 'agent-1');
   assert.equal(dev.status, 'running'); assert.equal(dev.last_seen, '2026-10-31T10:00:00Z'); assert.equal(dev.age, '2 h'); assert.equal(dev.session, 'sess-9'); assert.equal(dev.runtime, 'claude-code');
   assert.equal(w.find(x => x.id === 'agent-2').status, 'done'); assert.deepEqual(workers(d, { slice: 'remove-a-book' }), []);
-  assert.equal(fs.readFileSync(path.join(d, '.git', 'buddy', 'workers.jsonl'), 'utf8').trim().split('\n').length, 4);
+  assert.equal(fs.readFileSync(path.join(d, '.buddy', 'workers.jsonl'), 'utf8').trim().split('\n').length, 4);
 });
 test('refusals: bad slice, role or id, a repeated id, an unknown worker, no git repository', () => {
   const d = repo();

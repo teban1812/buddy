@@ -1,24 +1,24 @@
 // The index of the records (R138, R139): one reader reads, in one pass, every record Buddy keeps (milestones, changes and their pieces, the
 // map of what was asked, the question batches, the checkpoint evidence and the decisions of docs/requirements-log.md) into one object, the
-// one the board, its page, the digest and the order of the work are built from. `.git/buddy/index.json` is its by-product for other readers
+// one the board, its page, the digest and the order of the work are built from. `.buddy/index.json` is its by-product for other readers
 // (`buddy find`, an agent): it is rewritten only when a record changed (the fingerprint of the files read: path, size and time) and never
 // kept in the history (X2). No server, no viewer (X1). A record that does not read is named in `problems`, not left out in silence. A file
 // written by an earlier version of what it computes (RULES; Now and Next joined it in R144, a waiting milestone in R147) is rebuilt.
 // Every reader that only reads the records takes them from here (R148): the board, the digest, the minutes, resume, the accept card's
 // batches and the story view; the writers and verify read the files. A rebuild rereads only the files whose size or time changed since the
-// last one (`.git/buddy/index-cache.json` keeps, per file read, its stamp and what was read from it), and reads the short summary a
+// last one (`.buddy/index-cache.json` keeps, per file read, its stamp and what was read from it), and reads the short summary a
 // checkpoint writes beside its evidence instead of the whole evidence when there is one.
 import fs from 'node:fs';
 import path from 'node:path';
 import crypto from 'node:crypto';
-import { linkChanges } from './verify.mjs';
+import { linkChanges, inLayout } from './verify.mjs';
 import { parseDocument } from './frontmatter.mjs';
 import { parseSteps } from './slice.mjs';
 import { unspecifiedOf, withReclassified, EVIDENCE_FILE, summaryFileOf, evidenceSummary } from './evidence.mjs';
 import { PRIORITIES, proposedDependencies } from './requests.mjs';
-import { buddyDir, isGitRepo } from './gitdir.mjs';
+import { buddyDir, ensureBuddyDir, isGitRepo } from './gitdir.mjs';
 
-export const INDEX = '.git/buddy/index.json';   // where it is in a plain repository; in a worktree, in its own git folder (R146)
+export const INDEX = '.buddy/index.json';   // Buddy's local unversioned index at the project root (ignored by .gitignore; per worktree)
 export const indexFile = repo => path.join(buddyDir(repo), 'index.json');
 export const cacheFile = repo => path.join(buddyDir(repo), 'index-cache.json');
 export const DECISIONS = 'docs/requirements-log.md';
@@ -33,7 +33,7 @@ const RULES = 7;   // 2: Next may be a milestone waiting for the owner's go-ahea
                    // 6: Next may be the next piece of a change being built in pieces (R156); 7: only open requests' proposed dependencies count (R162)
 
 // The files read: the .md under docs/buddy, docs/decisions and docs/questions.md (the records, in the order loadFiles gives), the evidence of
-// each change folder and of .git/buddy (checkpoints run without a change), and the decisions. Only a listing and a stat each: cheap.
+// each change folder and of .buddy (checkpoints run without a change), and the decisions. Only a listing and a stat each: cheap.
 export function inputs(repo) {
   const md = []; const evidence = []; const docs = path.join(repo, 'docs');
   const walk = p => {
@@ -101,7 +101,7 @@ export function buildIndex(repo, { now = () => new Date(), inp = inputs(repo), c
     const v = load(f, readMd);
     if (v.error) { if (v.buddy) problems.push({ file: rel(repo, f), message: v.error }); continue; }
     if (v.none) continue; const data = v.data;
-    if (data.schema === 'buddy/slice@1') docs.push({ data, steps: v.steps, file: f });
+    if (data.schema === 'buddy/slice@1' && !inLayout(f)) continue; if (data.schema === 'buddy/slice@1') docs.push({ data, steps: v.steps, file: f });
     else if (data.schema === 'buddy/question-batch@0') batches.push({ ...data, id: data.id, slice: data.slice ?? null, file: rel(repo, f), questions: (data.questions || []).map(q => ({ ...q, blocking: !!q.blocking, answer: q.answer ?? null })), assumed_defaults: data.assumed_defaults || [] });
     else if (data.schema === 'buddy/requests@1') requests = (data.items || []).map(x => ({ ...x }));
     else notes.push({ schema: data.schema, file: rel(repo, f), data, ...(v.body !== undefined ? { body: v.body } : {}) });
@@ -167,12 +167,12 @@ export function buildIndex(repo, { now = () => new Date(), inp = inputs(repo), c
   return index;
 }
 
-// The index as `.git/buddy/index.json` holds it, rebuilt (and written) when a record changed since, or with `force`. A rebuild rereads only
+// The index as `.buddy/index.json` holds it, rebuilt (and written) when a record changed since, or with `force`. A rebuild rereads only
 // the files whose stamp changed, from the cache; `force` reads every file again. Outside a git repository nothing is written. Returns
 // { index, rebuilt, file, reread } (`reread`: the paths read again, on a rebuild).
 const readCache = repo => { try { const c = JSON.parse(fs.readFileSync(cacheFile(repo), 'utf8')); return c.rules === RULES && c.files ? c : null; } catch { return null; } };
 function writeOut(repo, index, cache) {
-  if (!isGitRepo(repo)) return; const file = indexFile(repo); fs.mkdirSync(path.dirname(file), { recursive: true });
+  if (!isGitRepo(repo)) return; const file = indexFile(repo); ensureBuddyDir(repo);
   fs.writeFileSync(file, JSON.stringify(index) + '\n'); if (cache) fs.writeFileSync(cacheFile(repo), JSON.stringify({ rules: RULES, files: cache.files }) + '\n');
 }
 export function refreshIndex(repo, { force = false, now } = {}) {

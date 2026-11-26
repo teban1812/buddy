@@ -6,14 +6,15 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { startSlice, moveSlice, readSlice, screensAdd, screensRemove } from '../src/slicestore.mjs';
-import { readPrototype, draftManifest, confirmManifest, readManifest, MANIFEST } from '../src/prototype.mjs';
+import { draftOf, writeReading } from './_reading.helper.mjs';
+import { draftManifest, confirmManifest, readManifest, MANIFEST } from '../src/prototype.mjs';
 import { verify } from '../src/verify.mjs';
 
 const BIN = fileURLToPath(new URL('../bin/buddy.mjs', import.meta.url));
 const HTML = `<section id="list"><h1>Reading list</h1><a href="#add">Add one</a><a href="#stats">Stats</a></section><section id="add"><h2>Add a book</h2><a href="#list">Back</a></section><section id="stats"><h1>Stats</h1><a href="#list">Back</a></section>`;
 function project({ manifest = true } = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ps-')); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true }); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  if (manifest) fs.writeFileSync(path.join(d, MANIFEST), draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }));
+  if (manifest) { writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), draftManifest(draftOf(HTML), { date: '2026-11-01' })); }
   return d;
 }
 const change = d => startSlice({ repo: d, title: 'List and add books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'] });

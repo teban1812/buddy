@@ -10,7 +10,7 @@ import { age } from './board.mjs';
 import { workers } from './workers.mjs';
 import { screensBrief } from './prototype.mjs';
 import { confirmedAssumptions } from './slice.mjs';
-import { buddyDir } from './gitdir.mjs';
+import { ensureBuddyDir } from './gitdir.mjs';
 
 const RESUMABLE = ['building', 'rework', 'blocked'];
 // The index of the normative documents the standards cite, copied from the library at birth (contract 2; init.mjs NORMATIVE).
@@ -39,7 +39,7 @@ export function resumeBrief(repo, id, now, { index } = {}) {
   const nextStep = steps.find(x => !x.done && !steps.some(y => y.num.startsWith(x.num + '.') && !y.done)) ?? null;
   return {
     id, title: d.title, kind: d.kind, status: d.status, branch: d.branch ?? null, updated: d.updated ?? d.created, age: age(d.updated ?? d.created, now),
-    request: d.request, criteria: d.criteria || [], assumptions: [...(s.change ? confirmedAssumptions(recordOf(x, s.change).data) : []), ...confirmedAssumptions(d)], steps: steps.map(x => ({ num: x.num, text: x.text, done: x.done })), next_step: nextStep ? nextStep.num : null,
+    request: d.request, criteria: d.criteria || [], assumptions: [...(s.change ? confirmedAssumptions(recordOf(x, s.change).data) : []), ...confirmedAssumptions(d)], steps: steps.map(x => ({ num: x.num, text: x.text, done: x.done, ...(x.dropped ? { dropped: true } : {}) })), next_step: nextStep ? nextStep.num : null,
     normative: fs.existsSync(path.join(repo, NORMATIVE)) ? NORMATIVE : null, screens: screensBrief(repo, d.screens), divergences: d.divergences || [], answered, open, decisions, workers: workers(repo, { slice: id, now: () => new Date(now) }),
     git: { branch: git(['branch', '--show-current'], repo).trim() || null, last_commit: git(['log', '-1', '--format=%h %s'], repo).trim() || null, changed_files: dirty.length, changed: dirty.slice(0, 10).map(l => l.trim()) },
   };
@@ -54,7 +54,7 @@ export function briefText(b) {
   if (b.normative) o.push('', `Normative documents: ${b.normative}, next to the standards in docs/standards/. ${NORMATIVE_RULE}`);
   if (b.screens) o.push('', 'Prototype screens you cover (your experience contract: start from them, you may improve them, and declare every departure with `buddy slice divergence add`; the originals are in the files named below):', '', b.screens.text);
   if (b.divergences.length) o.push('', 'Departures from the prototype you have declared (the Product Owner accepts or rejects each at acceptance; a rejected one is yours to undo):', ...b.divergences.map(v => `  ${v.id} (${v.kind}, ${v.status}) on ${v.screen}: the prototype ${v.prototype}; built: ${v.built}; why: ${v.why}`));
-  if (b.steps.length) o.push('', `Steps (${b.steps.filter(x => x.done).length} of ${b.steps.length} done):`, ...b.steps.map(x => `  ${'  '.repeat(x.num.split('.').length - 1)}[${x.done ? 'x' : ' '}] ${x.num}${x.num.includes('.') ? '' : '.'} ${x.text}${x.num === b.next_step ? '   <- next' : ''}`));
+  if (b.steps.length) o.push('', `Steps (${b.steps.filter(x => x.done).length} of ${b.steps.length} done):`, ...b.steps.map(x => `  ${'  '.repeat(x.num.split('.').length - 1)}[${x.dropped ? '-' : x.done ? 'x' : ' '}] ${x.num}${x.num.includes('.') ? '' : '.'} ${x.text}${x.num === b.next_step ? '   <- next' : ''}`));
   else o.push('', 'No steps written yet: write the plan first (buddy step add).');
   if (b.answered.length) o.push('', 'Decided by the Product Owner or assumed (do not ask again):', ...b.answered.map(a => `  ${a.situation} [${a.id}] -> ${a.answer}  [${a.origin}${a.status === 'assumed' ? ', not confirmed' : ''}]`));
   if (b.decisions.length) o.push('', 'Decision records:', ...b.decisions.map(x => `  ${x.id}  ${x.title}${String(x.status).startsWith('superseded') ? `  (${x.status})` : ''}`));
@@ -75,9 +75,9 @@ export function inFlight(repo, now, { index } = {}) {
   });
 }
 
-// Dev's hand-over (R119, R134): the brief written to a file under .git/buddy/handover/, where what is not worth keeping in the history lives,
+// Dev's hand-over (R119, R134): the brief written to a file under .buddy/handover/, where what is not worth keeping in the history lives,
 // so that Buddy raises Dev with its path and never a paraphrase. Returns the path.
 export function writeHandover(repo, id, now) {
-  const text = briefText(resumeBrief(repo, id, now)); const dir = path.join(buddyDir(repo), 'handover'); fs.mkdirSync(dir, { recursive: true });
+  const text = briefText(resumeBrief(repo, id, now)); const dir = ensureBuddyDir(repo, 'handover');
   const file = path.join(dir, `${id}-dev-${new Date(now).toISOString().slice(0, 19).replace(/:/g, '')}Z.md`); fs.writeFileSync(file, text); return path.resolve(file);
 }

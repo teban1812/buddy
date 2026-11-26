@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // usage: resume.mjs [<slice id>] [--repo <dir>] [--now <ISO time>] [--json | --handover]
 // Without an id: the slices in flight (building, rework, blocked). With an id: the brief to relaunch Dev from the files (R53, R57);
-// --handover writes it to .git/buddy/handover/ and prints the file's path, which Buddy gives Dev (R134).
+// --handover writes it to .buddy/handover/ and prints the file's path, which Buddy gives Dev (R134).
 import { resumeBrief, briefText, inFlight, writeHandover } from '../src/resume.mjs';
 const a = process.argv.slice(2); const o = {}; const pos = [];
 for (let i = 0; i < a.length; i++) { if (a[i].startsWith('--')) { const k = a[i].slice(2); o[k] = ['json', 'handover'].includes(k) ? true : a[++i]; } else pos.push(a[i]); }

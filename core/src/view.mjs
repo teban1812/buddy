@@ -20,14 +20,9 @@ export function needsOwner(story) {
   return items;
 }
 
-export function scopeLine(scope) {
-  if (!scope) return null;
-  const s = scope.share; return `${s.answer} % from your answers · ${s.risk} % from a stated risk · ${s.request} % from the request alone · ${s.initiative + s.unclear} % the agent's own initiative or unclear`;
-}
-
 export const mergeLabel = m => (m ? { merged: `merged into ${m.trunk}`, pending: `waiting to merge into ${m.trunk}`, unknown: 'branch not found here' }[m.state] ?? null : null);
 
-export function summaryText(story, { scope, merge } = {}) {
+export function summaryText(story, { merge } = {}) {
   const o = story.slice.outcome || {}; const need = needsOwner(story); const out = [];
   out.push(`${story.slice.title} [${story.slice.id}] (${story.slice.status})`);
   const st = story.steps || []; if (st.length) out.push(`Steps: ${st.filter(x => x.done).length} of ${st.length} done`);
@@ -35,20 +30,15 @@ export function summaryText(story, { scope, merge } = {}) {
   if (o.built?.length) out.push('Built:', ...o.built.map(x => `  - ${x}`));
   if (o.left_out?.length) out.push('Left out:', ...o.left_out.map(x => `  - ${x}`));
   if (o.size) out.push(`Size: ${o.size}`);
-  const sl = scopeLine(scope); out.push(sl ? `Where the lines come from: ${sl}` : 'Where the lines come from: not measured for this change');
   out.push(need.length ? `Needs you (${need.length}):` : 'Nothing needs you.', ...need.map(n => `  - [${n.kind}] ${n.text}`));
   return out.join('\n');
 }
 
 const badge = o => `<span class="pill o-${esc(o)}">${esc(ORIGIN_LABEL[o] ?? o)}</span>`;
 
-export function renderView(story, { scope, evidence, commits = [], context, merge } = {}) {
+export function renderView(story, { evidence, commits = [], context, merge } = {}) {
   const s = story.slice; const o = s.outcome || {}; const need = needsOwner(story);
   const li = a => (a || []).map(x => `<li>${esc(x)}</li>`).join('');
-  const scopeHtml = scope ? `<div class="bar" title="share of added lines">${[['answer', 'your answers'], ['risk', 'stated risk'], ['request', 'request'], ['initiative', 'own initiative'], ['unclear', 'unclear']].filter(([k]) => scope.share[k]).map(([k, n]) => `<span class="seg s-${k}" style="width:${scope.share[k]}%">${scope.share[k] >= 8 ? esc(n) + ' ' + scope.share[k] + '%' : ''}</span>`).join('')}</div>
-    <p class="k">${esc(scopeLine(scope))} · ${scope.total_added} lines added (${scope.test_lines} in tests). Indicative: term overlap${scope.judge_cost_usd ? ' plus a model judge' : ''}.</p>
-    ${scope.items.filter(i => ['initiative', 'unclear'].includes(i.source)).length ? `<details><summary>What is not traced to anything you said (${scope.items.filter(i => ['initiative', 'unclear'].includes(i.source)).length})</summary><ul>${scope.items.filter(i => ['initiative', 'unclear'].includes(i.source)).map(i => `<li><code>${esc(i.file)}</code> ${i.lines} lines (${esc(i.source)}): ${esc(i.sample)}</li>`).join('')}</ul></details>` : ''}`
-    : '<p class="k">Where the lines come from: <b>not measured</b> for this change (run <code>scope</code> to add it).</p>';
   const qa = story.batches.map(b => `<h3>Round ${b.round} · ${esc(b.raised_by ?? '')} · ${esc(b.status)}</h3>${b.because ? `<p class="k">${esc(b.because)}</p>` : ''}${b.questions.map(q => {
     const opt = q.options.find(x => x.id === q.answer?.option);
     return `<div class="card"><div class="row"><b>${esc(q.situation)}</b><span class="k">${esc(q.id)}</span></div>${q.because ? `<p class="k">Because ${esc(q.because)}</p>` : ''}
@@ -69,14 +59,12 @@ h1{font-size:22px;margin:0 0 4px}h2{font-size:13px;letter-spacing:.06em;text-tra
 .row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}.pill{font-size:12px;font-weight:600;padding:1px 8px;border-radius:99px;border:1px solid var(--mut);color:var(--mut)}
 .o-human{color:var(--ok);border-color:var(--ok)}.o-delegated{color:var(--info);border-color:var(--info)}.o-assumed,.o-open,.sev-needs-human{color:var(--warn);border-color:var(--warn)}.o-repo{color:var(--info);border-color:var(--info)}.bad,.sev-blocking{color:var(--bad);border-color:var(--bad)}
 .opts{margin:6px 0;padding-left:18px}.chosen{font-weight:600}pre{background:var(--code);padding:10px;border-radius:8px;overflow:auto;white-space:pre-wrap;font:12px/1.4 ui-monospace,monospace}code{background:var(--code);padding:0 4px;border-radius:4px}
-.need li{margin:4px 0}.bar{display:flex;height:22px;border-radius:6px;overflow:hidden;border:1px solid var(--line);margin:8px 0}.seg{font-size:11px;color:#fff;padding:3px 6px;white-space:nowrap;overflow:hidden}
-.s-answer{background:#1a7f4b}.s-risk{background:#1b5fb4}.s-request{background:#6b6b66}.s-initiative{background:#b25e00}.s-unclear{background:#8a6d9e}
+.need li{margin:4px 0}
 table{width:100%;border-collapse:collapse;font-size:13.5px}td{padding:4px 6px;border-top:1px solid var(--line);vertical-align:top}.okc{color:var(--ok)}.badc{color:var(--bad)}
 </style></head><body><main>
 <h1>${esc(s.title)}</h1><p class="k">${esc(s.id)} · ${esc(s.kind)} · ${esc(s.status)}${s.accepted ? ` (accepted by you ${esc(s.accepted.at.slice(0, 10))}, ${esc(assuranceText(s.accepted))})` : ''}${s.accepted && mergeLabel(merge) ? ` · ${esc(mergeLabel(merge))}` : ''} · created ${esc(s.created.slice(0, 10))}</p><p>${esc(s.request)}</p>
 <h2>Outcome</h2><div class="card"><b>Built</b><ul>${li(o.built) || '<li class="k">not recorded</li>'}</ul><b>Left out</b><ul>${li(o.left_out) || '<li class="k">nothing recorded</li>'}</ul><b>Size</b><p>${esc(o.size ?? 'not recorded')}</p></div>
 ${(s.criteria || []).length || (story.steps || []).length ? `<h2>Criteria and steps</h2><div class="card">${(s.criteria || []).length ? `<b>Acceptance criteria</b><ul>${s.criteria.map(c => `<li><span class="k">${esc(c.id)}</span> ${esc(c.text)}</li>`).join('')}</ul>` : ''}${(story.steps || []).length ? `<b>Steps (${story.steps.filter(x => x.done).length} of ${story.steps.length} done)</b><ul>${story.steps.map(x => `<li class="${x.done ? 'chosen' : ''}" style="margin-left:${(x.depth - 1) * 16}px;list-style:none">${x.done ? '☑' : '☐'} <span class="k">${esc(x.num)}</span> ${esc(x.text)}</li>`).join('')}</ul>` : ''}</div>` : ''}
-<h2>Where the lines come from</h2>${scopeHtml}
 <h2>Needs you</h2>${need.length ? `<div class="card need"><ul>${need.map(n => `<li><span class="pill ${n.kind === 'assumed' ? 'o-assumed' : 'sev-' + esc(n.severity)}">${esc(n.kind)}</span> ${esc(n.text)}</li>`).join('')}</ul></div>` : '<div class="card"><span class="pill o-human">nothing</span> Nothing needs you.</div>'}
 <h2>Questions and answers</h2>${qa}
 <h2>Decisions</h2>${dec}

@@ -1,11 +1,12 @@
 // The registry of workers (Dev, the Reviewer, detached processes) raised for a slice, so that after a cut Buddy asks for each by its id
-// before raising another one (R60). Local, append-only JSON lines at .git/buddy/workers.jsonl, written only by this module through the CLI.
+// before raising another one (R60). Local, append-only JSON lines at .buddy/workers.jsonl, written only by this module through the CLI.
 // The id is the runtime's own (a Claude Code agent id, a session id); a pid, when there is one, lets the program say if the process still runs.
 import fs from 'node:fs';
 import path from 'node:path';
 import { age } from './board.mjs';
 import { SLICE_ID } from './ids.mjs';
-import { buddyDir, isGitRepo } from './gitdir.mjs';
+import { RUNTIMES, toolOfRuntime } from './tools.mjs';
+import { buddyDir, ensureBuddyDir, isGitRepo } from './gitdir.mjs';
 
 const ROLES = ['dev', 'reviewer', 'other'];
 const STATUSES = ['done', 'stopped', 'lost'];
@@ -13,14 +14,15 @@ const stamp = now => now().toISOString().slice(0, 19) + 'Z';
 const fileOf = repo => path.join(buddyDir(repo), 'workers.jsonl');
 
 function append(repo, ev) {
-  if (!isGitRepo(repo)) throw new Error('not a git repository: the worker registry lives in .git/buddy/');
-  fs.mkdirSync(path.dirname(fileOf(repo)), { recursive: true }); fs.appendFileSync(fileOf(repo), JSON.stringify(ev) + '\n');
+  if (!isGitRepo(repo)) throw new Error('not a git repository: the worker registry lives in .buddy/');
+  ensureBuddyDir(repo); fs.appendFileSync(fileOf(repo), JSON.stringify(ev) + '\n');
 }
 
-export function registerWorker(repo, { slice, role, id, runtime = 'claude-code', pid, session } = {}, { now = () => new Date() } = {}) {
+export function registerWorker(repo, { slice, role, id, runtime = RUNTIMES.claude, pid, session } = {}, { now = () => new Date() } = {}) {
   if (!SLICE_ID.test(slice || '')) throw new Error(`a worker belongs to a slice: ${slice} is not a slice id`);
   if (!ROLES.includes(role)) throw new Error(`role must be one of ${ROLES.join(', ')}`);
   if (!id || /\s/.test(id)) throw new Error('a worker needs the id the runtime gave it (no spaces)');
+  const tool = toolOfRuntime(runtime); if (!tool) throw new Error(`runtime must be ${Object.values(RUNTIMES).join(' or ')} (the tool, never the model), not ${runtime}`); runtime = RUNTIMES[tool];
   if (pid !== undefined && !(Number.isInteger(pid) && pid > 0)) throw new Error('pid must be a positive integer');
   if (workers(repo, { now }).some(w => w.id === id)) throw new Error(`worker ${id} is already registered`);
   append(repo, { at: stamp(now), event: 'register', id, slice, role, runtime, ...(pid ? { pid } : {}), ...(session ? { session } : {}) });
@@ -32,6 +34,9 @@ export function finishWorker(repo, id, status = 'done', { now = () => new Date()
   if (!STATUSES.includes(status)) throw new Error(`status must be one of ${STATUSES.join(', ')}`);
   if (!workers(repo, { now }).some(w => w.id === id)) throw new Error(`no worker ${id}`); append(repo, { at: stamp(now), event: 'finish', id, status });
 }
+
+// The tool (a key of TOOLS) that built a slice: the runtime of its latest Dev in the registry; undefined when no Dev was registered.
+export const builderOf = (repo, slice) => toolOfRuntime(workers(repo, { slice }).filter(w => w.role === 'dev').pop()?.runtime);
 
 export const pidAlive = pid => { try { process.kill(pid, 0); return true; } catch (e) { return e.code === 'EPERM'; } };
 

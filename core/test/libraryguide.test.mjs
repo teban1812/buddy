@@ -72,7 +72,7 @@ test('AC2: a library assembled from the guide\'s examples is read and gives birt
   assert.match(rec, /- PRV-01: .*Decided by the base application in src\/acme-orders\.mjs\. `decided`\n/); assert.match(rec, /- PRV-02: .*To draft\. `unknown`\n/);
   assert.ok(fs.existsSync(path.join(d, 'docs/steps/privacy-review/step.md')));
   assert.equal(read('docs/standards/normative.md'), FILES['normative/index.md']); assert.ok(!fs.existsSync(path.join(d, 'normative')));
-  assert.equal(read('.claude/skills/release-review/SKILL.md'), FILES['prompts/release-review/SKILL.md']);
+  assert.equal(read('.agents/skills/release-review/SKILL.md'), FILES['prompts/release-review/SKILL.md']);   // the full prompt; Claude Code's wrapper is tested in toolfiles.test.mjs
   assert.equal(fs.readdirSync(path.join(d, 'docs/decisions')).length, 1);
   const said = readContext(path.join(d, 'docs/context.md')).statements.filter(s => s.origin === 'human').map(s => [s.section, s.text]);
   assert.deepEqual(said.map(([s]) => s), ['Constraints', 'Risk appetite']); assert.match(said[0][1], /English\. Asked because: /);

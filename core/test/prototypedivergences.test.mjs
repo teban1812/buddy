@@ -6,7 +6,8 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { startSlice, moveSlice, stepAddTo, readSlice, screensAdd, divergenceAdd, divergenceRemove } from '../src/slicestore.mjs';
-import { readPrototype, draftManifest, confirmManifest, MANIFEST } from '../src/prototype.mjs';
+import { draftOf, writeReading } from './_reading.helper.mjs';
+import { draftManifest, confirmManifest, MANIFEST } from '../src/prototype.mjs';
 import { resumeBrief, briefText } from '../src/resume.mjs';
 import { verify } from '../src/verify.mjs';
 
@@ -15,7 +16,7 @@ const HTML = `<section id="list"><h1>Reading list</h1><a href="#add">Add one</a>
 const NOW = new Date().toISOString().slice(0, 19) + 'Z';
 function setup({ to = 'building' } = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pd-')); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true }); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
+  writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(draftOf(HTML), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
   const s = startSlice({ repo: d, title: 'List and add books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'] }); screensAdd(d, s.id, ['list', 'add']); stepAddTo(d, s.id, 'Build');
   for (const st of ['ready', 'building', 'delivered', 'rework'].slice(0, ['ready', 'building', 'delivered', 'rework'].indexOf(to) + 1)) moveSlice(d, s.id, st);
   return { d, id: s.id };

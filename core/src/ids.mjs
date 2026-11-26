@@ -12,10 +12,9 @@ export const clip = (t, max = 60) => { const s = String(t ?? '').replace(/\s+/g,
 export const named = (text, id) => (text ? `${clip(text)} [${id}]` : String(id));
 
 // A slice is named, not numbered (R86): lowercase letters, digits and single hyphens, at most 40 characters (R89), as OpenSpec names its changes.
-// The dated form of R56 is still read, so the records written before R86 verify until they are renamed.
 // The schemas keep a copy of SLICE_ID (test/schemas.test.mjs keeps them equal).
 export const SLICE_NAME = /^(?=.{1,40}$)[a-z0-9]+(?:-[a-z0-9]+)*$/;
-export const SLICE_ID = /^(?=.{1,40}$)(?:[a-z0-9]+(?:-[a-z0-9]+)*|S-\d{4}-\d{2}-\d{2}-[0-9a-f]{4})$/;
+export const SLICE_ID = SLICE_NAME;
 export const NAME_RULE = 'lowercase letters, digits and single hyphens, no hyphen at either end, at most 40 characters (add-validate-command)';
 const EMPTY = new Set(['and', 'by', 'the', 'of', 'a', 'an', 'to', 'for', 'in', 'on', 'with', 'or']);
 // The name Buddy proposes: the title folded to ASCII and lowercase, other characters as hyphens, cut at a word boundary within 40 characters,

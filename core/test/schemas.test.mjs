@@ -102,7 +102,7 @@ test('every slice-id pattern in the schemas is the one in the code (R86), so the
   const found = [];
   const walk = (x, at) => { if (x && typeof x === 'object') for (const [k, v] of Object.entries(x)) if (k === 'pattern' && /a-z0-9\]\+\(\?:-/.test(v)) found.push([at, v]); else walk(v, `${at}.${k}`); };
   for (const k of ['slice', 'question', 'decision', 'finding']) walk(JSON.parse(fs.readFileSync(path.join(HERE, '..', 'schemas', `${k}.schema.json`), 'utf8')), k);
-  assert.deepEqual(found.map(f => f[0]), ['slice.properties.id', 'slice.properties.epic', 'slice.properties.depends_on.items', 'question.properties.slice', 'decision.properties.slice', 'finding.properties.slice']);
+  assert.deepEqual(found.map(f => f[0]), ['slice.properties.id', 'slice.properties.depends_on.items', 'question.properties.slice', 'decision.properties.slice', 'finding.properties.slice']);
   for (const [at, p] of found) assert.equal(p, SLICE_ID.source, at);
 });
 test('slice: unknown references and an accepted slice with an open finding', WORKSHOP, () => {
@@ -127,7 +127,7 @@ test('playbook: dangling references, a writing reviewer, no human role', WORKSHO
   assert.ok(has(h, /needs a human role/));
 });
 test('playbook: a program check needs a command and every check must be used', WORKSHOP, () => {
-  const p = mutate({ 'build-slice.playbook.md': t => t.replace('    run: buddy scope\n', '').replace('checks: [validate, tests-intact, no-skip-markers, protected-files, tests-added, scope-trace]', 'checks: [validate, tests-intact, no-skip-markers, protected-files, tests-added]') });
+  const p = mutate({ 'build-slice.playbook.md': t => t.replace('    run: buddy scan\n    finding_class: no-tests\n', '    finding_class: no-tests\n').replace('protected-files, tests-added]\n  - id: review', 'protected-files]\n  - id: review') });
   assert.ok(has(p, /needs a run command/)); assert.ok(has(p, /never used by a stage/));
 });
 test('files without a Buddy schema are ignored; broken front matter is reported', WORKSHOP, () => {

@@ -1,38 +1,15 @@
 // Decision records, written as architecture decision records in MADR 4 (https://adr.github.io/madr/) that an architect reads without Buddy:
 // MADR's front matter (status, date, decision-makers, consulted, informed) and sections, with Buddy's own fields beside them (id, the change it
-// was taken for, supersedes, rules, built and where). Every record goes to docs/decisions/; records of older layouts are read where they are.
-// The numbered files of the old format (NNNN-<slug>.md) are only read: verifyMadr checks them against git.
+// was taken for, supersedes, rules, built and where). Every record goes to docs/decisions/.
 import fs from 'node:fs';
 import path from 'node:path';
-import { git } from './proc.mjs';
 import { dumpDocument } from './yaml.mjs';
 import { newId, named } from './ids.mjs';
 import { loadFiles } from './verify.mjs';
+import { refreshBoardPage } from './board.mjs';
 
 export const DIR = 'docs/decisions';
-const SECTIONS = ['Context and Problem Statement', 'Considered Options', 'Decision Outcome'];
 const slugOf = t => t.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '').slice(0, 50);
-const madrFiles = dir => (fs.existsSync(dir) ? fs.readdirSync(dir).filter(f => /^\d{4}-.+\.md$/.test(f)).sort() : []);
-const sh = (args, cwd) => git(args, cwd);
-
-export function verifyMadr(opt = {}, cwd = process.cwd()) {
-  const problems = []; const dir = path.join(cwd, DIR); const fs_ = madrFiles(dir);
-  fs_.forEach((f, i) => { if (Number(f.slice(0, 4)) !== i + 1) problems.push(`numbering gap at ${f}`); });
-  for (const f of fs_) {
-    const t = fs.readFileSync(path.join(dir, f), 'utf8');
-    for (const s of SECTIONS) if (!new RegExp(`##\\s+${s}\\s*\\n+\\S`).test(t)) problems.push(`${f}: empty or missing "${s}"`);
-    if (!/Requested by:\s*\S/.test(t)) problems.push(`${f}: missing "Requested by"`);
-  }
-  const base = sh(['log', '--format=%H', '--grep=baseline'], cwd).trim().split('\n').pop();
-  const head = opt.commit ? 'HEAD' : base;
-  const changed = [...new Set([...sh(['diff', '--name-only', head], cwd).split('\n'), ...sh(['ls-files', '--others', '--exclude-standard'], cwd).split('\n')])].filter(Boolean);
-  const code = changed.some(f => /^(src|server|tests?)\//.test(f) || /\.(ts|tsx|js)$/.test(f) && !f.startsWith('.claude') && !f.startsWith('tools/'));
-  const recs = changed.filter(f => f.startsWith(DIR + '/') && /^\d{4}/.test(path.basename(f)));
-  if (code && recs.length === 0) problems.push(opt.commit ? 'this commit changes code but adds no decision record' : 'code changed since baseline but no decision record was added');
-  if (opt.expect && recs.length < Number(opt.expect)) problems.push(`expected at least ${opt.expect} records, found ${recs.length}`);
-  return { problems, count: fs_.length };
-}
-
 // spec: { title, requested_by, decided_by: 'human'|'agent', slice? (the change it was taken for), supersedes?, questions?, evidence?,
 // rules: [{text, origin, confidence?, cite?}], context, options, outcome, reason, drivers?, consequences?, confirmation?, pros_cons?, consulted?, informed?,
 // built?, where? }. The program sets id, date, status and decision-makers; each record it supersedes is marked "superseded by <id>". A section
@@ -51,7 +28,8 @@ export function decideV0(spec, cwd = process.cwd(), { date = new Date().toISOStr
     + `## Decision Outcome\n\nChosen option: ${spec.outcome}, because ${spec.reason}\n\n${sec('### Consequences', spec.consequences)}${sec('### Confirmation', spec.confirmation)}${sec('## Pros and Cons of the Options', spec.pros_cons)}`;
   const f = `${DIR}/${id}-${slugOf(spec.title)}.md`; fs.writeFileSync(path.join(cwd, f), dumpDocument(data, body.trimEnd() + '\n'));
   for (const o of old) fs.writeFileSync(o.p, o.t.replace(/^status: (accepted|in-progress)$/m, `status: superseded by ${id}`));
-  return { file: f, id };
+  refreshBoardPage(cwd);   // the open board counts decisions (live-board)
+  return { file: f, id, superseded: old.map(o => o.p) };
 }
 
 // The record `id` and its text, when it can be superseded. An old record may be in docs/decisions or in a change folder (the layout before every ADR went to docs/decisions).

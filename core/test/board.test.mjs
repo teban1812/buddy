@@ -7,8 +7,10 @@ import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
 import { startSlice, moveSlice, stepAddTo, stepSetIn, readSlice } from '../src/slicestore.mjs';
 import { createBatch, writeBatchFile, assumeDefaults } from '../src/queue.mjs';
-import { loadBoard, boardText, boardHtml, age } from '../src/board.mjs';
+import { loadBoard, boardText, boardHtml, age, groupCounts, groupsText } from '../src/board.mjs';
 
+const lang = h => h.replace(/<span lang="en">(.*?)<\/span>/g, '$1');   // the records' own text is marked with its language: out for what these tests read
+const en = h => lang(h).replace(/<span data-l="es">.*?<\/span>/g, '').replace(/<span data-l="en">(.*?)<\/span>/g, '$1');   // the page in English: the Spanish copies out, the language wrappers off
 const BIN = fileURLToPath(new URL('../bin/board.mjs', import.meta.url));
 const EXAMPLES = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', '..', 'docs', 'design', 'examples');
 const WORKSHOP = { skip: fs.existsSync(EXAMPLES) ? false : 'the design examples (docs/design/examples) are a workshop fixture, not in the public copy' };
@@ -72,12 +74,39 @@ test('an empty repository says so, and a risk appetite nobody confirmed is waiti
   fs.copyFileSync(path.join(EXAMPLES, 'context.md'), path.join(d, 'docs', 'context.md'));
   assert.match(boardText(loadBoard(d, NOW)), /risk appetite: 2 risk-appetite line\(s\) not confirmed/);
 });
-test('the page is self-contained, escapes content, and lists every state', () => {
-  const { d } = fixture(); const html = boardHtml(loadBoard(d, NOW));
-  assert.ok(!/(src|href)="https?:/.test(html)); assert.match(html, /prefers-color-scheme:dark/); assert.match(html, /Waiting for you \(3\)/);
-  for (const st of ['refining', 'ready', 'building', 'blocked', 'delivered', 'rework', 'accepted', 'abandoned']) assert.match(html, new RegExp(`<h2>${st} `));
+test('the page is self-contained, escapes content, says each state in the owner\'s words in two languages, and reads with no script', () => {
+  const { d } = fixture(); const raw = boardHtml(loadBoard(d, NOW)); const html = en(raw);
+  assert.ok(!/(src|href)="https?:/.test(raw)); assert.match(raw, /prefers-color-scheme:dark/); assert.match(html, /Waiting for you \(3\)/);
+  assert.match(raw, /<html lang="en"/); assert.match(raw, /<span data-l="es">Espera por ti \(3\)<\/span>/); assert.match(raw, /localStorage/); assert.match(raw, /navigator\.language/);   // English shows with no script; Spanish and the selector are there
+  assert.match(raw, /<span data-l="es">Para que la pruebes<\/span>/); assert.doesNotMatch(html, /0 of 0 steps/);
+  for (const st of ['Being defined', 'Being built', 'Ready for you to try']) assert.ok(html.includes(`>${st}</span>`), st);
   const e = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-')); fs.mkdirSync(path.join(e, 'docs')); startSlice({ repo: e, title: '<script>x</script>', request: 'r' });
   assert.ok(!boardHtml(loadBoard(e, NOW)).includes('<script>x'));
+});
+const raw2 = b => boardHtml(b);
+test('the page puts the milestones in a card each, an overall bar, and a change of pieces shows how many are accepted and delivered', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-')); fs.mkdirSync(path.join(d, 'docs'));
+  const b = { now: NOW, current: [], next: null, waiting: [], requests: null, decisions: null, milestones: [{ id: 'm1', title: 'First', request: 'Ship the first reading list', status: 'building', rank: 1, changes: { accepted: 1, total: 2 } }, { id: 'm0', title: 'Zero', status: 'accepted', rank: 0, changes: { accepted: 1, total: 1 } }],
+    slices: [['ch', 'Reading list', 'ready', null, 'm1', 0], ['p1', 'Piece one', 'accepted', 'ch', 'm1', 2], ['p2', 'Piece two', 'delivered', 'ch', 'm1', 3], ['p3', 'Piece three', 'refining', 'ch', 'm1', 0], ['p4', 'Piece four', 'building', 'ch', 'm1', 4], ['o', 'Other', 'accepted', null, 'm1', 1], ['z', 'Zed', 'accepted', null, 'm0', 1], ['l', 'Loose', 'refining', null, null, 0]]
+      .map(([id, title, status, change, milestone, total]) => ({ id, title, kind: 'feat', status, change, milestone, updated: NOW, steps: { done: 0, total }, priority: null, waits_for: [], abandoned_deps: [], assurance: null, merge: null })) };
+  const html = en(boardHtml(b));
+  assert.match(html, /class="group owner"/); assert.match(html, /class="group agent"/); assert.match(html, /<details class="group done">/);
+  assert.match(html, /2 of 4 delivered · 1 accepted/); assert.doesNotMatch(html, /0 of 0 steps|pieces accepted/);
+  assert.match(html, /<b>Reading list<\/b><div class="row"><span class="chip agent">Being built/);   // its state comes from its pieces, not from its own record ("ready")
+  assert.match(html, /<b>2\. Piece two<\/b><div class="row"><span class="chip define">Delivered, waits for the rest/); assert.doesNotMatch(html, /chip owner">Delivered|chip owner">Ready for you to try<\/span><span class="meta">0 of 3/);
+  assert.match(html, /<b>1\. Piece one<\/b><div class="row"><span class="chip done">Accepted<\/span><span class="meta">0 of 2 tasks/); assert.match(html, /See the 4 pieces/);
+  assert.ok(html.indexOf('Reading list') < html.indexOf('2 of 4 delivered') && html.indexOf('2 of 4 delivered') < html.indexOf('Now: piece 4 of 4') && html.indexOf('Now: piece 4 of 4') < html.indexOf('See the 4 pieces'));
+  assert.match(raw2(b), /Ver las 4 piezas/); assert.match(raw2(b), /Entregada, espera al resto/); assert.match(raw2(b), /pieza 4 de 4/); assert.match(raw2(b), /0 de 4 tareas/);
+  const done = boardHtml({ ...b, slices: b.slices.map(r => (r.change === 'ch' ? { ...r, status: 'delivered' } : r)) });   // all pieces delivered: the change is the owner's turn
+  assert.match(en(done), /<b>Reading list<\/b><div class="row"><span class="chip owner">Ready for you to try/);
+  assert.doesNotMatch(html, /\.wl\{[^}]*--owner/);   // a wait for another change is not the owner's turn: the owner's colour is only for what waits for the owner
+  assert.equal(html.match(/<b>\d+%<\/b>/g).length, 1); assert.match(html, /<b>67%<\/b>/);                                   // the percentage shows once
+  assert.match(html, /<tr><td class="name">First<\/td><td>Being built<\/td><td class="bc">[^\n]*1 of 2 accepted<\/td><\/tr><tr><td class="name">Zero<\/td><td>Done<\/td>[^\n]*1 of 1 accepted<\/td><\/tr>\n<tr><td class="name">Changes of no milestone<\/td><td>outside the percentage<\/td><td class="bc"><\/td><td class="n"><b>1<\/b> change</);
+  assert.doesNotMatch(html, /Finished milestones/); assert.match(html, /<details class="fold">/); assert.equal(html.match(/<article class="ms">/g).length, 1);
+  assert.match(html, /<p class="goal">Ship the first reading list<\/p>/); assert.doesNotMatch(html, /class="goal" title=/);   // the goal is whole in the text, not cut to a tooltip
+  assert.match(html, /Now: piece 4 of 4 — Piece four<\/span><br><span class="meta">0 of 4 tasks<\/span>[^\n]*?<\/div><details class="pcs">/); assert.equal(html.match(/Piece four/g).length, 2);   // the Now line and the fold, never a third bare line; the piece in progress is on the Now line, not a bare line
+  assert.match(html, /class="s-done"[^\n]*class="s-agent"/); assert.match(en(done), /class="s-done"[^\n]*class="s-owner"/); assert.match(html, /1 done<\/span>[^\n]*your turn|1 done<\/span><span><i class="dot agent">/);   // the bar and legend: done, your turn, in progress, to define
+  assert.match(boardHtml(b), /<span data-l="es">Hito<\/span>/);
 });
 test('the CLI: text, --json, --out and a bad --now', () => {
   const { d } = fixture(); const run = (...x) => spawnSync(process.execPath, [BIN, '--repo', d, '--now', NOW, ...x], { encoding: 'utf8' });
@@ -93,7 +122,7 @@ test('a branch is waiting to be merged when every slice on it is accepted and it
   const a = startSlice({ repo: d, title: 'One', request: 'r', criteria: ['x'], excludes: ['Nothing beyond the criteria above'], branch: 'feat/list' }); const b = startSlice({ repo: d, title: 'Two', request: 'r', criteria: ['x'], excludes: ['Nothing beyond the criteria above'], branch: 'feat/list' });
   const text = () => boardText(loadBoard(d, NOW));
   accept(a.id); assert.doesNotMatch(text(), /merge branch/);                                             // one slice of the branch is still open: not yet
-  accept(b.id); assert.match(text(), /merge branch feat\/list into main: 2 slice\(s\) accepted/);
+  accept(b.id); assert.match(text(), /merge branch feat\/list into main: 2 slices accepted/);
   const w = loadBoard(d, NOW).waiting; assert.deepEqual(w.map(x => x.kind), ['merge']);
   G('merge', '-q', '--no-ff', 'feat/list', '-m', 'merge'); assert.doesNotMatch(text(), /merge branch/);   // merged: no longer waiting
   G('branch', '-q', '-d', 'feat/list'); assert.doesNotMatch(text(), /merge branch/);                     // merged and deleted: nothing to say
@@ -130,8 +159,8 @@ test('the board asks git once per branch, not once per slice (every git call is 
   assert.ok(calls <= 5, `6 accepted slices on one branch took ${calls} git calls; it should be a handful, independent of the number of slices`);
 });
 import { pieceExceptions } from '../src/board.mjs';
-// The owner accepts features, not pieces (R70, R83): a clean piece waits as delivered and asks nothing; an exception is listed in plain words.
-test('a delivered piece with a clean checkpoint is not waiting for you; one with an exception is, with the exception; the whole change is listed once (R83)', () => {
+// The owner accepts features, not pieces (R70, R83, R249): a piece never waits on its own, whatever its checkpoint found; its change is listed once, with how many notes the reviews left.
+test('a delivered piece never waits for you on its own; the change is listed once when all its pieces are delivered, with how many notes the reviews left and none of their text (R249)', () => {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-')); fs.mkdirSync(path.join(d, 'docs')); let min = 0; const now = () => new Date(Date.UTC(2026, 9, 31, 8, min++, 30));
   const ch = startSlice({ repo: d, title: 'Reading list', request: 'r', now });
   const piece = t => startSlice({ repo: d, title: t, request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id, now }).id;
@@ -139,15 +168,30 @@ test('a delivered piece with a clean checkpoint is not waiting for you; one with
   const ev = (slice, when, reasons) => { const dir = path.join(path.dirname(readSlice(d, ch.id).file), 'evidence'); fs.mkdirSync(dir, { recursive: true }); fs.writeFileSync(path.join(dir, `evidence-${when}Z-run.json`), JSON.stringify({ when, slice, reasons })); };
   const deliver = id => { for (const to of ['ready', 'building', 'delivered']) moveSlice(d, id, to, { now }); };
   const waiting = () => loadBoard(d, NOW).waiting.filter(w => w.kind === 'accept').map(w => w.text);
-  ev(a, '2026-10-31T090000', ['validate failed']); ev(a, '2026-10-31T100000', []); deliver(a);       // the latest round is clean: it asks nothing
+  ev(a, '2026-10-31T090000', ['validate failed']); ev(a, '2026-10-31T100000', []); deliver(a);       // the latest round is clean: it leaves no note
   assert.deepEqual(waiting(), []);
   ev(b, '2026-10-31T110000', ['no tests added', 'validate failed']); deliver(b);
-  assert.deepEqual(waiting(), [`look at: Remove a book [${b}], a piece of Reading list: no tests added; validate failed`]);   // c still open: the change is not listed yet
-  deliver(c);                                                                                          // no evidence: nothing says it passed
-  assert.deepEqual(waiting().sort(), [`look at: Remove a book [${b}], a piece of Reading list: no tests added; validate failed`, `look at: Sort books [${c}], a piece of Reading list: no checkpoint evidence was kept for it`, `try and accept: Reading list [${ch.id}]`].sort());
+  assert.deepEqual(waiting(), []);                                                                      // a piece with exceptions does not wait alone; c is still open: the change is not listed yet
+  deliver(c);                                                                                          // no evidence: nothing says it passed, which is a note too
+  assert.deepEqual(waiting(), [`try and accept: Reading list [${ch.id}] (the reviews left 3 notes)`]);   // two of b's and the one of c's, never their text
   assert.equal(loadBoard(d, NOW).waiting.find(x => x.text.startsWith('try and accept')).ref, ch.id);
-  moveSlice(d, c, 'abandoned', { now }); assert.equal(loadBoard(d, NOW).waiting.filter(x => x.ref === ch.id).length, 1);   // abandoned counts as finished
+  assert.doesNotMatch(boardText(loadBoard(d, NOW)), /no tests added|validate failed|no checkpoint evidence|look at:|a piece of/);
+  moveSlice(d, c, 'abandoned', { now }); assert.deepEqual(waiting(), [`try and accept: Reading list [${ch.id}] (the reviews left 2 notes)`]);   // abandoned counts as finished, and leaves no note
+  ev(b, '2026-10-31T120000', ['no tests added']); assert.match(waiting()[0], /\(the reviews left 1 note\)$/);   // the latest review of the piece counts: one note reads in the singular
   assert.match(boardText(loadBoard(d, NOW)), /try and accept: Reading list \[reading-list\]/);
+  const page = boardHtml(loadBoard(d, NOW)); assert.match(en(page), /the reviews left 1 note\)/); assert.match(page, /las revisiones dejaron 1 nota\)/);
+});
+// What stops the work is the only thing of a piece that waits alone: a third round with findings still open, said in plain words and with none of the reviews' text.
+test('a piece whose work stopped after several reviews is listed once, as a decision on its change, with no text from the reviews (R249)', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bp-')); fs.mkdirSync(path.join(d, 'docs')); let min = 0; const now = () => new Date(Date.UTC(2026, 9, 31, 8, min++, 30));
+  const ch = startSlice({ repo: d, title: 'Reading list', request: 'r', now });
+  const a = startSlice({ repo: d, title: 'Save books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id, now }).id;
+  const dir = path.join(path.dirname(readSlice(d, ch.id).file), 'evidence'); fs.mkdirSync(dir, { recursive: true });
+  fs.writeFileSync(path.join(dir, 'evidence-2026-10-31T090000Z-run.json'), JSON.stringify({ when: '2026-10-31T09:00:00Z', slice: a, reasons: ['validate failed', 'round 3 with findings still open: do not try again by yourself; hand the matter to the owner'] }));
+  for (const to of ['ready', 'building']) moveSlice(d, a, to, { now });
+  const w = loadBoard(d, NOW).waiting; assert.deepEqual(w.map(x => x.text), [`decide: Reading list [${ch.id}]: the work stopped after several reviews and needs your decision`]);
+  assert.doesNotMatch(JSON.stringify(w), /validate failed|do not try again/); assert.match(boardHtml(loadBoard(d, NOW)), /decide: <span lang="en">Reading list<\/span> \[reading-list\]: el trabajo se detuvo tras varias revisiones y necesita tu decisión/);
+  moveSlice(d, a, 'delivered', { now }); assert.deepEqual(loadBoard(d, NOW).waiting.map(x => x.text), [`try and accept: Reading list [${ch.id}] (the reviews left 1 note)`]);   // delivered, it got through: it no longer stops the work, and the line that said so is no note
 });
 import { startMilestone } from '../src/slicestore.mjs';
 import { digest, digestText } from '../src/digest.mjs';
@@ -172,7 +216,7 @@ test('the board, its page, its JSON and the digest say what is being built now, 
   assert.equal(board.next.id, b.id); assert.deepEqual(board.next.waits_for, [{ id: a.id, title: 'Save books', status: 'building' }]);   // Sort books is next, and says it waits
   const text = boardText(board); assert.match(text, /\n\nNow: Save books \[save-books\] · step 2 of 3: Screen\nNext: Sort books \[sort-books\] · waits for Save books \[save-books\]\n\n/);
   assert.ok(text.indexOf('Now:') < text.indexOf('aiting for you'));
-  const html = boardHtml(board); assert.match(html, /<h2>Now<\/h2><ul><li>Save books \[save-books\] · step 2 of 3: Screen<\/li><\/ul><h2>Next<\/h2><p>Sort books \[sort-books\] · waits for Save books \[save-books\]<\/p>/); assert.ok(html.indexOf('<h2>Now</h2>') < html.indexOf('aiting for you'));
+  const html = en(boardHtml(board)); assert.match(html, /<h2>Now<\/h2><ul><li>Save books \[save-books\] · step 2 of 3: Screen<\/li><\/ul><h2[^>]*>Next<\/h2><p>Sort books \[sort-books\] · waits for Save books \[save-books\]<\/p>/); assert.ok(html.indexOf('Waiting for you') < html.indexOf('<h2>Now</h2>'));   // the owner's turn comes first, then now and next
   const run = spawnSync(process.execPath, [BIN, '--repo', d, '--now', NOW, '--json'], { encoding: 'utf8' }); const json = JSON.parse(run.stdout);
   assert.equal(json.current[0].step.text, 'Screen'); assert.equal(json.next.id, b.id);
   const dg = digestText(digest(d, NOW)); assert.match(dg, /^DIGEST [^\n]+\n\nNow: Save books \[save-books\] · step 2 of 3: Screen\nNext: Sort books \[sort-books\] · waits for Save books \[save-books\]\n\n/);
@@ -202,7 +246,7 @@ test('when the milestone being worked on is finished and another is open, Next n
   assert.deepEqual(board.next, { kind: 'milestone', id: 'later', title: 'Second release', status: 'refining', milestone: 'later', waits_for: [], go_ahead: true });
   const line = 'Next: milestone Second release [later] · waits for your go-ahead';
   assert.ok(boardText(board).includes(`\n${line}\n`)); assert.ok(digestText(digest(d, NOW)).includes(`\n${line}\n`));
-  assert.ok(boardHtml(board).includes('<h2>Next</h2><p>milestone Second release [later] · waits for your go-ahead</p>'));
+  assert.ok(en(boardHtml(board)).includes('Next</h2><p>milestone Second release [later] · waits for your go-ahead</p>'));
   const json = JSON.parse(spawnSync(process.execPath, [BIN, '--repo', d, '--now', NOW, '--json'], { encoding: 'utf8' }).stdout); assert.equal(json.next.kind, 'milestone'); assert.equal(json.next.go_ahead, true);
   assert.equal(buildIndex(d).next.id, 'later');                                                         // computed in the index
   // accepting the finished one changes nothing: the next one still waits, refining or ready, and none of its changes starts or is Next
@@ -235,18 +279,22 @@ test('the exceptions of a piece: the reasons of its latest checkpoint and the de
   assert.deepEqual(pieceExceptions({ departures: 0 }, null), ['no checkpoint evidence was kept for it']);
 });
 // show-unrun-checks-honestly (R76): a check that did not run is never shown as clean; the board lists it as waiting.
-test('a delivered piece whose evidence has a check not run waits for the owner, saying which did not run', () => {
+test('a delivered piece whose evidence has a check not run counts as a note on its change, which waits for the owner once its pieces are delivered', () => {
   const ev = { reasons: [], checks: { validate: 'passed', scan: 'passed', acceptance_guard: 'passed', reviewer: 'not run', prototype_departures: 'not applicable' } };
   assert.deepEqual(pieceExceptions({ departures: 0 }, ev), ['the reviewer did not run']);
   assert.deepEqual(pieceExceptions({ departures: 0 }, { ...ev, checks: { ...ev.checks, reviewer: 'passed' } }), []);
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bu-')); fs.mkdirSync(path.join(d, 'docs')); let min = 0; const now = () => new Date(Date.UTC(2026, 9, 31, 8, min++, 30));
   const ch = startSlice({ repo: d, title: 'Reading list', request: 'r', now });
   const a = startSlice({ repo: d, title: 'Save books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id, now }).id;
-  startSlice({ repo: d, title: 'Sort books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id, now });
+  const b = startSlice({ repo: d, title: 'Sort books', request: 'r', criteria: ['Works'], excludes: ['Nothing beyond the criteria above'], inChange: ch.id, now }).id;
   const dir = path.join(path.dirname(readSlice(d, ch.id).file), 'evidence'); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'evidence-2026-10-31T090000Z-run.json'), JSON.stringify({ when: '2026-10-31T09:00:00Z', slice: a, ...ev }));
   for (const to of ['ready', 'building', 'delivered']) moveSlice(d, a, to, { now });
-  assert.deepEqual(loadBoard(d, NOW).waiting.filter(w => w.kind === 'accept').map(w => w.text), [`look at: Save books [${a}], a piece of Reading list: the reviewer did not run`]);
+  const accept = () => loadBoard(d, NOW).waiting.filter(w => w.kind === 'accept').map(w => w.text);
+  assert.deepEqual(accept(), []);                                                                     // the piece does not wait alone (R249), and Sort books is still open
+  fs.writeFileSync(path.join(dir, 'evidence-2026-10-31T091000Z-run.json'), JSON.stringify({ when: '2026-10-31T09:10:00Z', slice: b, reasons: [], checks: { ...ev.checks, reviewer: 'passed' } }));
+  for (const to of ['ready', 'building', 'delivered']) moveSlice(d, b, to, { now });
+  assert.deepEqual(accept(), [`try and accept: Reading list [${ch.id}] (the reviews left 1 note)`]);   // the check that did not run is one note on the change, never named here
 });
 // A change built in pieces (R156): while some piece is building, delivered or accepted and some is still refining or ready, Next is its next
 // piece by rank, with the change named, before any other change; with none of its pieces left, Next looks at the other changes again.
@@ -262,8 +310,74 @@ test('while a change is built in pieces, Next names its next piece and the chang
   let board = loadBoard(d, NOW); assert.deepEqual(board.next, { id: b.id, title: 'Sort books', status: 'refining', milestone: null, waits_for: [], change: { id: ch.id, title: 'Reading list' } });
   const line = 'Next: Sort books [sort-books], a piece of Reading list [reading-list] · refining';
   assert.ok(boardText(board).includes(`\n${line}\n`)); assert.ok(digestText(digest(d, NOW)).includes(`\n${line}\n`));
-  assert.ok(boardHtml(board).includes('<h2>Next</h2><p>Sort books [sort-books], a piece of Reading list [reading-list] · refining</p>'));
+  assert.ok(en(boardHtml(board)).includes('Next</h2><p>Sort books [sort-books], a piece of Reading list [reading-list] · Being defined</p>'));
   moveSlice(d, a.id, 'delivered', { now }); assert.equal(buildIndex(d).next.id, b.id);                // one delivered, none building: still its next piece
   for (const to of ['ready', 'building']) moveSlice(d, b.id, to, { now }); assert.match(boardText(loadBoard(d, NOW)), /\nNext: Share books \[share-books\], a piece of Reading list \[reading-list\] · ready\n/);
   moveSlice(d, c.id, 'building', { now }); assert.match(boardText(loadBoard(d, NOW)), /\nNext: Loose fix \[loose-fix\] · ready\n/);   // no piece left: the other changes
+});
+test('the page has no summary line of what was asked and no count of decisions (R245), and no risks or third-party waits (R246)', () => {
+  const b = { now: NOW, current: [], next: null, waiting: [], milestones: [], slices: [], decisions: { decided: 265, not_built_yet: 44, partly: 25 },
+    requests: { total: 4, covered: 4, excluded: 0, deferred: 0, waiting: 0, must: [], nobody: [] } };
+  const html = en(boardHtml(b)); assert.doesNotMatch(html, /Decisions: |What you asked for \(|Everything you asked for|265|destination/); assert.doesNotMatch(html, /[Rr]isk|third part/);
+});
+test('the page reloads itself every 10 seconds and keeps the scroll, the open folds and the language (live-board)', () => {
+  const { d } = fixture(); const raw = boardHtml(loadBoard(d, NOW));
+  assert.match(raw, /setInterval\([\s\S]*location\.reload\(\)[\s\S]*,10000\)/); assert.match(raw, /sessionStorage/); assert.match(raw, /scrollTo\(/); assert.match(raw, /\.open/); assert.match(raw, /buddy-lang/);
+  assert.ok(!/(src|href)="https?:/.test(raw)); assert.match(en(raw), /Waiting for you \(3\)/);   // still reads with scripts off, still self-contained
+});
+test('a command that changes a record rewrites an existing .buddy/board.html, writes none when there is none, and never fails for it', () => {
+  const { d, a } = fixture(); const page = path.join(d, '.buddy', 'board.html');
+  stepSetIn(d, a.id, '2', true); assert.ok(!fs.existsSync(page));                              // no page asked for: nothing written
+  fs.mkdirSync(path.dirname(page), { recursive: true }); fs.writeFileSync(page, 'old');
+  stepSetIn(d, a.id, '2', false); assert.match(fs.readFileSync(page, 'utf8'), /<!doctype html>/);   // a record changed: the page follows it
+  const SLICE = fileURLToPath(new URL('../bin/slice.mjs', import.meta.url)); fs.writeFileSync(page, 'old');
+  assert.equal(spawnSync(process.execPath, [SLICE, '--repo', d, 'step', 'done', a.id, '2'], { encoding: 'utf8', cwd: d }).status ?? 0, 0);
+  fs.rmSync(page); fs.mkdirSync(page);                                                          // a page that cannot be written (a folder there): the command still succeeds
+  stepSetIn(d, a.id, '2', true); assert.ok(fs.statSync(page).isDirectory());
+});
+test('writing a question batch rewrites an existing .buddy/board.html, found from the batch file\'s path (live-board)', () => {
+  const { d, batch } = fixture(); const page = path.join(d, '.buddy', 'board.html'); const file = path.join(d, 'docs', 'questions.md');
+  writeBatchFile(file, batch); assert.ok(!fs.existsSync(page));
+  fs.mkdirSync(path.dirname(page), { recursive: true }); fs.writeFileSync(page, 'old');
+  writeBatchFile(file, batch); assert.match(fs.readFileSync(page, 'utf8'), /<!doctype html>/);
+});
+
+// build-and-test-the-prototype, AC3 (R261): while nothing is being built the board says the stage of discovering the product, from docs/discovery/ and the prototype only.
+test('the board shows the discovery\'s stage while nothing is being built, and nothing once the prototype is confirmed', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-disc-')); const w = (f, t = 'x') => { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), t); };
+  assert.equal(loadBoard(d, NOW).discovery, null); assert.match(boardText(loadBoard(d, NOW)), /Now: nothing is being built/);
+  w('docs/discovery/research.md'); assert.equal(loadBoard(d, NOW).discovery, 1);
+  assert.match(boardText(loadBoard(d, NOW)), /Now: Discovering the product: stage 1 of 3 \(research and brief\)/);
+  w('docs/discovery/flows.md'); assert.equal(loadBoard(d, NOW).discovery, 2);
+  assert.match(en(boardHtml(loadBoard(d, NOW))), /Discovering the product: stage 2 of 3 \(flows and wireframes\)/);
+  w('docs/inputs/prototype/home.html', '<html><body><a href="x.html">x</a></body></html>'); assert.equal(loadBoard(d, NOW).discovery, 3);
+  assert.match(boardText(loadBoard(d, NOW)), /stage 3 of 3 \(prototype and its test\)/);
+  assert.ok(!boardText(loadBoard(fixture().d, NOW)).includes('Discovering'));
+  const { d: busy } = fixture(); w.call(null, 'x'); fs.mkdirSync(path.join(busy, 'docs', 'discovery'), { recursive: true });
+  assert.equal(loadBoard(busy, NOW).discovery, null, 'a change is being built: no stage');
+});
+
+// R276 step 3: a handed-over prototype audited without discovery has only ux-audit.md (and screenshots) in docs/discovery/, so the board shows no discovery stage.
+test('the board ignores a docs/discovery/ holding only the prototype usability audit report', () => {
+  const d = fs.mkdtempSync(path.join(os.tmpdir(), 'bd-ux-')); const w = (f, t = 'x') => { fs.mkdirSync(path.dirname(path.join(d, f)), { recursive: true }); fs.writeFileSync(path.join(d, f), t); };
+  w('docs/inputs/prototype/home.html', '<html><body><h1>Home</h1></body></html>');
+  w('docs/discovery/ux-audit.md', '# Audit\n');
+  assert.equal(loadBoard(d, NOW).discovery, null, 'only ux-audit.md: no discovery stage');
+  w('docs/discovery/home.png', 'png');
+  assert.equal(loadBoard(d, NOW).discovery, null, 'ux-audit.md and a screenshot beside it: still no discovery stage');
+  w('docs/discovery/brief.md', '# Brief\n');
+  assert.equal(loadBoard(d, NOW).discovery, 3, 'once a real discovery file is there alongside the prototype, stage 3 shows');
+});
+
+// R285 (show-milestone-progress-in-panel, AC3): a milestone's counts by group are the board's own, and the page's bar and `buddy board` say the same.
+test('a milestone counts its changes in the groups of its page\'s bar, and the page and the text board say the same counts', () => {
+  const row = ([id, status, change = null]) => ({ id, title: id, kind: 'feat', status, change, milestone: 'm1', updated: NOW, steps: { done: 0, total: 0 }, priority: null, waits_for: [], abandoned_deps: [], assurance: null, merge: null });
+  const slices = [['a', 'accepted'], ['b', 'delivered'], ['c', 'building'], ['d', 'ready'], ['e', 'refining'], ['f', 'abandoned'], ['g', 'ready'], ['g1', 'delivered', 'g'], ['g2', 'delivered', 'g']].map(row);
+  const groups = groupCounts(slices, slices.filter(r => !r.change));
+  assert.deepEqual(groups, { done: 2, owner: 2, agent: 2, define: 1 });   // the abandoned one sits with the done ones, as on the page; a change whose pieces are all delivered is the owner's turn
+  assert.equal(groupsText(groups), '2 done · 2 your turn · 2 in progress · 1 to define');
+  const b = { now: NOW, current: [], next: null, waiting: [], requests: null, decisions: null, slices, milestones: [{ id: 'm1', title: 'First', status: 'building', rank: 1, changes: { accepted: 1, total: 7 }, groups }] };
+  const legend = en(boardHtml(b)).match(/<div class="legend">(.*?)<\/div>/)[1].replace(/<[^>]+>/g, '').replace(/(\d+ [a-z ]+?)(?=\d|$)/g, '$1 · ').replace(/ · $/, '');
+  assert.equal(legend, groupsText(groups));
+  assert.match(boardText(b), /MILESTONE  m1  First  · building · 1 of 7 change\(s\) accepted \(2 done · 2 your turn · 2 in progress · 1 to define\)\n/);
 });

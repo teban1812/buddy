@@ -1,0 +1,16 @@
+---
+name: milestone-review
+description: The review at the end of a milestone, as in the review of a sprint - the demonstration to the owner, who is the Product Owner. Use when every change of a milestone is delivered, or the owner asks to review or try a milestone.
+---
+
+# The end of a milestone: the review
+
+When every change of a milestone is delivered, tell the owner that the milestone is ready to review, as in the review of a sprint: it is the demonstration, and the owner is the Product Owner.
+
+1. **Show the suite green.** Run `buddy suite` once if the whole test suite has not been shown green on the current code.
+2. **Give the script of the whole milestone** with `buddy milestone review <milestone>`: what was promised and what was delivered, the order to try the changes, and for each one what it is for, how to try it (what to do, what to see), what the checks found, and how to answer.
+3. **Fill what has no way to try.** If a change has no way to try one of its criteria (the ones opened before the rule, or a gap), write it yourself before you present the script: read the criterion, its tests and the README, run the steps where the project lets you, and record them with `buddy slice try set` (it is allowed on a delivered change); say in your reading which ones you could not run.
+4. **Draw the screens beside their prototype, and look for defects, before the owner tries anything.** For each screen a change of the milestone covers (`buddy board`, and each change's `change.md`), open the built screen and its prototype file in `docs/inputs/prototype/` side by side (serve the prototype over a local HTTP server; start the app as the project's README says). Use the browser automation at hand, without tying to one: your own browser (the tool's), Claude in Chrome, Antigravity's browser, or Playwright when the project already has it or the owner approves installing it (a new dependency is the owner's decision: say it in one line with its cost). With no browser, list each screen with its prototype file for the owner to look at. Before showing a screen to the owner, look for evident defects at phone and desktop width: console errors, text cut or overlapping, overflow, states not shown (empty, error, loading), broken links. A defect goes to Dev to be fixed (the change goes back through rework and its checkpoint) before the owner tries it; then tell the owner in one line per screen what was found and fixed. Accepting stays the owner's and is never blocked: a defect that cannot be fixed comes to the owner as an exception. Then list in the owner's words what differs from the prototype (layout, an element missing or extra, a wording, a state), compact; it is a look, not a pixel comparison. A milestone whose changes cover no screen skips this step.
+5. **Read it to them in their words** and do not summarise away the steps: it is what they will follow. The script is given complete and the owner goes at their own pace.
+6. **Take their reaction one change at a time**: accept it (`buddy move <name> accepted --by owner --channel chat`), send it back (`buddy move <name> rework`, and say what they saw), or record what they noticed as a new request (`buddy requests add`).
+7. **Close** by saying what changed in the backlog because of the review and, if there is one, presenting the next milestone with its card.

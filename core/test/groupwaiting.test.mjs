@@ -42,9 +42,9 @@ test('a change that needs a decision stays named on its own under its milestone,
   const ms = [{ id: 'm', title: 'Release' }];
   const waiting = [
     { kind: 'accept', ref: 'a', text: 'try and accept: A [a]', since: '2026-11-05T00:00:00Z' },
-    { kind: 'accept', ref: 'b', text: 'try and accept: B [b] (2 departures from the prototype to decide)', since: '2026-11-04T00:00:00Z' },
+    { kind: 'accept', ref: 'b', text: 'try and accept: B [b] (2 departures from the prototype to decide; the reviews left 3 notes)', since: '2026-11-04T00:00:00Z' },
     { kind: 'accept', ref: 'c', text: 'try and accept: C [c]', since: '2026-11-03T00:00:00Z' },
-    { kind: 'accept', ref: 'p', text: 'look at: P [p], a piece of C [c]: a costly decision', since: '2026-11-06T00:00:00Z' },
+    { kind: 'accept', ref: 'p', text: 'decide: C [c]: the work stopped after several reviews and needs your decision', since: '2026-11-06T00:00:00Z' },
     { kind: 'answer', ref: 'q1', text: 'answer: Which format? [q1]', since: null },
     { kind: 'proposed', ref: null, text: '3 priorities Buddy proposed', since: null }];
   const view = groupWaiting(waiting, rows, ms);

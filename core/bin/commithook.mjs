@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// The plugin's PreToolUse hook for the Bash tool (R111): reads what Claude Code is about to run on stdin and refuses a `git commit` whose message
+// The plugin's PreToolUse hook for the Bash tool (R111): reads what Claude Code or Antigravity is about to run on stdin and refuses a `git commit` whose message
 // breaks Conventional Commits or Buddy's trailers, or that would put a secret in the repository. It acts only in a Buddy project (docs/buddy/ exists),
 // writes nothing into it, and is quiet (exit 0) for everything else. A refusal is exit 2 with the reasons on stderr, which Claude reads and fixes.
 import fs from 'node:fs';
@@ -10,9 +10,11 @@ import { checkCommitMessage } from '../src/commitcheck.mjs';
 let input = '';
 try { input = fs.readFileSync(0, 'utf8'); } catch { process.exit(0); }
 let ev; try { ev = JSON.parse(input); } catch { process.exit(0); }
-if (ev.tool_name !== 'Bash' || typeof ev.tool_input?.command !== 'string') process.exit(0);
+// Claude Code sends { tool_name: 'Bash', tool_input: { command } }; Antigravity sends { toolCall: { name: 'run_command', args: { CommandLine } } }
+const command = ev.tool_name === 'Bash' ? ev.tool_input?.command : ev.toolCall?.name === 'run_command' ? ev.toolCall.args?.CommandLine : undefined;
+if (typeof command !== 'string') process.exit(0);
 const cwd = ev.cwd || process.cwd();
-const plan = readCommitCommands(ev.tool_input.command, { readFile: f => fs.readFileSync(path.resolve(cwd, f), 'utf8') });
+const plan = readCommitCommands(command, { readFile: f => fs.readFileSync(path.resolve(cwd, f), 'utf8') });
 const commits = plan.commits;
 if (!commits.length || !fs.existsSync(path.join(cwd, 'docs', 'buddy'))) process.exit(0);
 const problems = [];

@@ -3,6 +3,7 @@
 // everything else becomes an assumed default. Port of probes/queue/followup_analysis.py, with structured follow-ups.
 import { spawnSync } from 'node:child_process';
 import { createBatch } from './queue.mjs';
+import { plan } from './tools.mjs';
 
 export const LIMITS = { maxFollowups: 3, maxRounds: 3 };   // round 1 = intake, so at most two follow-up rounds (design: 04 rule R7)
 
@@ -48,9 +49,13 @@ export async function analyseAnswers({ request, context, batch, ask, date }) {
   return { followupBatch, defaults: a.defaults_assumed, warnings: a.warnings };
 }
 
-export function claudeAsk({ model = 'claude-haiku-5-5', onCost = () => {} } = {}) {
+// Asks for the economical level of the tool Dev builds with (`claude -p`, or `agy -p` when that is the tool); what the level could not be turned into goes to `onNote`.
+export function claudeAsk({ model, onCost = () => {}, onNote = n => console.error(`NOTE: ${n}`), env = process.env } = {}) {
+  let p;
   return async prompt => {
-    const r = spawnSync('claude', ['-p', prompt, '--model', model, '--allowedTools', '', '--max-turns', '2', '--output-format', 'json'], { encoding: 'utf8', input: '', maxBuffer: 1 << 24 });
+    if (!p) { p = plan('analysis', 'economical', { env, model }); p.notes.forEach(onNote); }
+    if (p.tool === 'agy') { const r = spawnSync(p.cmd, [...p.flags, `-p=${prompt}`], { encoding: 'utf8', maxBuffer: 1 << 24 }); if (r.error || r.status) throw new Error(`agy gave no answer (${r.error?.code || `exit ${r.status}`})`); return r.stdout; }
+    const r = spawnSync(p.cmd, ['-p', prompt, ...p.flags, '--allowedTools', '', '--max-turns', '2', '--output-format', 'json'], { encoding: 'utf8', input: '', maxBuffer: 1 << 24 });
     const o = JSON.parse(r.stdout); onCost(o.total_cost_usd || 0); return o.result;
   };
 }

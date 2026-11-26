@@ -329,8 +329,8 @@ a { color: var(--accent); text-underline-offset: 3px; }
       <span class="eyebrow" lang="es">El compañero del Product Owner</span>
       <span class="eyebrow" lang="en">The Product Owner's companion</span>
       <h1>Buddy</h1>
-      <p class="lede" lang="es">Buddy es un plugin de Claude Code que te ayuda a crear y mantener software que da valor a tu negocio, con eficiencia. Pregunta primero lo que solo tú sabes, deja que las pruebas automáticas y un revisor independiente comprueben el trabajo, y <span class="hl">te pide solo las decisiones que son tuyas</span>.</p>
-      <p class="lede" lang="en">Buddy is a Claude Code plugin that helps you build and maintain software that delivers real value to your business, without waste. He asks you first about what only you know, lets automated checks and an independent reviewer verify the work, and <span class="hl">brings you only the decisions that are yours to make</span>.</p>
+      <p class="lede" lang="es">Buddy es un plugin de Claude Code y de Antigravity que te ayuda a crear y mantener software que da valor a tu negocio, con eficiencia. Pregunta primero lo que solo tú sabes, deja que las pruebas automáticas y un revisor independiente comprueben el trabajo, y <span class="hl">te pide solo las decisiones que son tuyas</span>.</p>
+      <p class="lede" lang="en">Buddy is a plugin for Claude Code and Antigravity that helps you build and maintain software that delivers real value to your business, without waste. He asks you first about what only you know, lets automated checks and an independent reviewer verify the work, and <span class="hl">brings you only the decisions that are yours to make</span>.</p>
       <p class="muted" lang="es">Y no olvida nada de lo que pediste: cada pedido queda construido, excluido o diferido a la vista. La meta es que gastes tus minutos solo en lo que es tuyo, sin la duda de si el trabajo avanza o de si es el trabajo correcto.</p>
       <p class="muted" lang="en">And he never loses track of what you ask for: every request ends up built, explicitly excluded or openly deferred. The point is that you spend your time only on what needs you, without wondering whether the work is moving or whether it is the right work.</p>
       <span class="tag" lang="es">versión <b>0.4.0</b> disponible, probada en dos proyectos reales · Windows, macOS y Linux</span>
@@ -659,7 +659,9 @@ a { color: var(--accent); text-underline-offset: 3px; }
       <h2 lang="es">Dos maneras de hablar con Buddy, el mismo Buddy.</h2>
       <h2 lang="en">Two ways to work with Buddy. Same Buddy.</h2>
       <p lang="es">Buddy es un plugin de Claude Code. Lo usas desde la <b>app de escritorio de Claude</b> (la pestaña Code) o desde la <b>terminal</b> (el CLI de Claude Code), en Windows, macOS o Linux. Las dos leen la misma configuración de tu computadora, así que lo instalas una vez y funciona en ambas. En Linux se usa desde la terminal: la app de escritorio de Claude es para Windows y macOS.</p>
+      <p lang="es">Desde la 0.5.0 Buddy también funciona en <b>Antigravity</b> (su línea de comandos <code>agy</code>, la App y el IDE), con la misma conversación y los mismos registros: puedes cambiar de herramienta a mitad de un proyecto sin perder nada. Allí se instala una vez para toda la máquina con <code>agy plugin install https://github.com/teban1812/buddy</code>. Opcional, en cualquiera de las dos: un <b>panel junto a la conversación</b> que muestra lo que espera por ti, lo que se construye y lo que viene, con un botón para cada cosa que te espera (la guía dice cómo instalarlo).</p>
       <p lang="en">Buddy is a Claude Code plugin. You work with him from the <b>Claude desktop app</b> (the Code tab) or from the <b>terminal</b> (the Claude Code CLI), on Windows, macOS or Linux. Both read the same configuration on your machine, so you install him once and he is available in both. On Linux you use him from the terminal: the Claude desktop app is for Windows and macOS.</p>
+      <p lang="en">Since 0.5.0 Buddy also works in <b>Antigravity</b> (its <code>agy</code> command line, the App and the IDE), with the same conversation and the same records: you can switch tools halfway through a project and lose nothing. There he is installed once for the whole machine with <code>agy plugin install https://github.com/teban1812/buddy</code>. Optional, in either tool: a <b>panel beside the conversation</b> that shows what waits for you, what is being built and what comes next, with a button for each thing waiting for you (the guide says how to install it).</p>
     </div>
     <figure class="dia">
       <div class="dia-box">
@@ -915,6 +917,27 @@ claude plugin install buddy@buddy --scope local</pre>
           <p class="where only-cli" lang="en"><b>In the terminal</b>, copy them over with your file manager, or ask Buddy to do it.</p>
         </div>
       </li>
+      <li id="discovery">
+        <div class="row"><h3 lang="es">¿Solo tienes una idea? Descubre el producto con Buddy</h3><h3 lang="en">Only an idea? Discover the product with Buddy</h3><span class="phase" lang="es">si no hay PRD ni prototipo</span><span class="phase" lang="en">when there is no PRD and no prototype</span></div>
+        <div class="body">
+          <p lang="es">Sin PRD ni prototipo, Buddy te ofrece descubrir el producto en la misma conversación. Primero lee lo que ya tengas (notas, investigación, un brief, flujos, wireframes) y te dice qué etapa está cubierta, qué falta y por dónde seguir: nunca repites lo que ya hiciste. Con un PRD, antes de planificar te dice qué le falta para construirlo bien.</p>
+          <p lang="en">With no PRD and no prototype, Buddy offers to discover the product in the same conversation. First he reads whatever you already have (notes, research, a brief, flows, wireframes) and tells you which stage is covered, what is missing and where to go on: you never repeat what you already did. With a PRD, before planning he tells you what it lacks to be built well.</p>
+          <ul class="plain-list" lang="es">
+            <li><b>Etapa 1.</b> Investigación con su fuente en cada hallazgo, entrevistas que tú haces con una guía de preguntas sobre hechos pasados (Buddy cita las palabras de cada persona, sin inventar), y un brief que confirmas línea por línea: glosario, reglas con un ejemplo que cumple y uno que no, y lo que se da por cierto sin prueba.</li>
+            <li><b>Etapa 2.</b> Los flujos antes de cualquier pantalla (quién puede ver o hacer qué, los errores, los estados), las reglas de diseño de la biblioteca y un tema que eliges, o tu propia propuesta visual convertida en tema, y los wireframes de las pantallas clave hasta que estés de acuerdo.</li>
+            <li><b>Etapa 3.</b> Un prototipo HTML con tu tema, una auditoría de usabilidad antes de que nadie lo pruebe, una prueba con una o dos personas reales, y tu palabra de que la dueña o el dueño del proceso lo aprobó.</li>
+          </ul>
+          <ul class="plain-list" lang="en">
+            <li><b>Stage 1.</b> Research with a source for every finding, interviews you hold with a guide of questions about past facts (Buddy quotes each person's own words, never inventing), and a brief you confirm line by line: a glossary, rules with one example that meets them and one that doesn't, and what is taken for true without proof.</li>
+            <li><b>Stage 2.</b> The flows before any screen (who may see or do what, the errors, the states), the library's design rules and a theme you choose, or your own visual proposal turned into a theme, and wireframes of the key screens until you agree.</li>
+            <li><b>Stage 3.</b> An HTML prototype in your theme, a usability audit before anyone tries it, a test with one or two real people, and your word that the person who owns the process approved it.</li>
+          </ul>
+          <p lang="es">Lo que confirmas pasa solo al contexto del negocio, al mapa de lo pedido y al contrato de experiencia; el primer hito se planifica desde ahí. Mientras tanto el tablero dice en qué etapa vas. El paso a paso está en la <a href="guide/discovery.md">guía de discovery</a>.</p>
+          <p lang="en">What you confirm flows straight into the business context, the map of requests and the experience contract; the first milestone is planned from there. Meanwhile the board shows which stage you are in. The step-by-step is in the <a href="guide/discovery.md">discovery guide</a>.</p>
+          <p class="say" lang="es">No tengo nada escrito, solo la idea. Ayúdame a investigar.</p>
+          <p class="say" lang="en">I have nothing written, just the idea. Help me research it.</p>
+        </div>
+      </li>
       <li>
         <div class="row"><h3 lang="es">Confirma el negocio</h3><h3 lang="en">Confirm the business</h3><span class="phase" lang="es">tú decides</span><span class="phase" lang="en">you decide</span></div>
         <div class="body">
@@ -927,8 +950,8 @@ claude plugin install buddy@buddy --scope local</pre>
       <li>
         <div class="row"><h3 lang="es">Confirma el prototipo, línea por línea</h3><h3 lang="en">Confirm the prototype, line by line</h3><span class="phase" lang="es">tu contrato de experiencia</span><span class="phase" lang="en">your experience contract</span></div>
         <div class="body">
-          <p lang="es">El prototipo es la forma más poderosa de decir lo que quieres. Buddy arma su ficha: cada pantalla, cada flujo y lo que es de mentira (datos de ejemplo, un botón que no hace nada).</p>
-          <p lang="en">A prototype is the clearest way to say what you want. Buddy builds a summary of it: every screen, every flow, and what is only for show (sample data, a button that does nothing).</p>
+          <p lang="es">El prototipo es la forma más poderosa de decir lo que quieres. Buddy arma su ficha: cada pantalla, cada flujo y lo que es de mentira (datos de ejemplo, un botón que no hace nada). Antes de que la confirmes, pasa el prototipo por una auditoría de usabilidad: los hallazgos te llegan por importancia y nada cambia sin tu visto bueno.</p>
+          <p lang="en">A prototype is the clearest way to say what you want. Buddy builds a summary of it: every screen, every flow, and what is only for show (sample data, a button that does nothing). Before you confirm it, the prototype goes through a usability audit: the findings reach you by importance and nothing changes without your go-ahead.</p>
         </div>
         <figure class="dia">
           <div class="dia-box">
@@ -981,8 +1004,8 @@ claude plugin install buddy@buddy --scope local</pre>
       <li>
         <div class="row"><h3 lang="es">Decide el hito y responde lo costoso</h3><h3 lang="en">Choose the milestone and answer the costly questions</h3><span class="phase" lang="es">una ronda por hito</span><span class="phase" lang="en">one round per milestone</span></div>
         <div class="body">
-          <p lang="es">Buddy te propone dos o tres maneras de partir el trabajo en entregas de valor (todo junto, un MVP y después fases, o primero una prueba de concepto si algo desconocido podría cambiar el plan), cada una con lo que gana el negocio y lo que cuesta. Tú eliges. Después abre los changes del primer hito, con criterios de aceptación y lo que no incluyen. Si un criterio es vago ("rápido", "intuitivo"), te propone una versión comprobable. Si un criterio se puede leer de dos maneras, o dudas de él, te propone un ejemplo que lo cumple y uno que no, en los términos de tu negocio, y cuando los confirmas quedan escritos dentro del criterio; un criterio que nadie puso en duda no lleva ejemplos. Te hace una ronda de preguntas para el hito, solo de lo costoso de cambiar después (el modelo de datos, dinero, seguridad, contratos públicos, el costo de operar), cada una con opciones, costo, recomendación y un valor por defecto; vuelve a preguntar solo si tus respuestas abren otra decisión costosa, y como mucho dos veces. Junto a las preguntas te dice <b>lo que va a suponer</b>, como máximo cinco cosas, para que lo corrijas a tiempo y no pagues un change nuevo después. Todo eso llega en la <b>ficha del hito</b>: qué construirá, sus dudas y sus supuestos. Un hito nuevo empieza solo después de que la ves y das tu visto bueno.</p>
-          <p lang="en">Buddy offers two or three ways to split the work into deliveries of value (everything at once, an MVP followed by phases, or a proof of concept first when an unknown could change the plan), each with what the business gets and what it costs. You choose. He then opens the changes for the first milestone, each with acceptance criteria and what it leaves out. If a criterion is vague ("fast", "intuitive"), he suggests a testable version. If a criterion can be read two ways, or you hesitate on it, he offers one example that meets it and one that does not, in your business terms, and once you confirm them they are written inside the criterion; a criterion nobody doubted gets no example. He asks one round of questions per milestone, only about things that are expensive to change later (the data model, money, security, public contracts, running costs), each with options, costs, a recommendation and a default. He asks again only if your answers open up another costly decision, and at most twice. Along with the questions he lists <b>what he will assume</b>, five things at most, so you can correct them early instead of paying for a new change later. All of this arrives as the <b>milestone card</b>: what he will build, the open questions and the assumptions. A new milestone starts only once you have seen it and given the go-ahead.</p>
+          <p lang="es">Buddy te propone dos o tres maneras de partir el trabajo en entregas de valor (todo junto, un MVP y después fases, o primero una prueba de concepto si algo desconocido podría cambiar el plan), cada una con lo que gana el negocio y lo que cuesta. Tú eliges. Después abre los changes del primer hito, con criterios de aceptación y lo que no incluyen. Si un criterio es vago ("rápido", "intuitivo"), te propone una versión comprobable. Si un criterio se puede leer de dos maneras, o dudas de él, te propone un ejemplo que lo cumple y uno que no, en los términos de tu negocio, y cuando los confirmas quedan escritos dentro del criterio; un criterio que nadie puso en duda no lleva ejemplos. Para cada criterio te dice de dónde sale lo que pide (un registro, una tabla, un servicio, un permiso, un dato del negocio) y si existe; si no tiene fuente, se pregunta al inicio, nunca a mitad de la construcción. Te hace una ronda de preguntas para el hito, solo de lo costoso de cambiar después (el modelo de datos, dinero, seguridad, contratos públicos, el costo de operar), cada una con opciones, costo, recomendación y un valor por defecto; vuelve a preguntar solo si tus respuestas abren otra decisión costosa, y como mucho dos veces. Junto a las preguntas te dice <b>lo que va a suponer</b>, como máximo cinco cosas, para que lo corrijas a tiempo y no pagues un change nuevo después. Todo eso llega en la <b>ficha del hito</b>: qué construirá, sus dudas y sus supuestos. Un hito nuevo empieza solo después de que la ves y das tu visto bueno.</p>
+          <p lang="en">Buddy offers two or three ways to split the work into deliveries of value (everything at once, an MVP followed by phases, or a proof of concept first when an unknown could change the plan), each with what the business gets and what it costs. You choose. He then opens the changes for the first milestone, each with acceptance criteria and what it leaves out. If a criterion is vague ("fast", "intuitive"), he suggests a testable version. If a criterion can be read two ways, or you hesitate on it, he offers one example that meets it and one that does not, in your business terms, and once you confirm them they are written inside the criterion; a criterion nobody doubted gets no example. For each criterion he says where what it asks for comes from (a record, a table, a service, a permission, a business fact) and whether it exists; one with no source is asked at the start, never halfway through the build. He asks one round of questions per milestone, only about things that are expensive to change later (the data model, money, security, public contracts, running costs), each with options, costs, a recommendation and a default. He asks again only if your answers open up another costly decision, and at most twice. Along with the questions he lists <b>what he will assume</b>, five things at most, so you can correct them early instead of paying for a new change later. All of this arrives as the <b>milestone card</b>: what he will build, the open questions and the assumptions. A new milestone starts only once you have seen it and given the go-ahead.</p>
           <p class="say" lang="es">Acepto el hito MVP como lo propones. En la pregunta 2, decide tú.</p>
           <p class="say" lang="en">The MVP milestone works for me as proposed. Question 2: your call.</p>
         </div>
@@ -990,8 +1013,8 @@ claude plugin install buddy@buddy --scope local</pre>
       <li>
         <div class="row"><h3 lang="es">Buddy construye; tú puedes irte</h3><h3 lang="en">Buddy builds; you can walk away</h3><span class="phase" lang="es">change por change</span><span class="phase" lang="en">one change at a time</span></div>
         <div class="body">
-          <p lang="es">Buddy le entrega cada change a Dev, que construye con los estándares del proyecto y las pantallas del prototipo que cubre, marca cada paso y hace commit al cerrar. Buddy no espera a que aceptes uno para seguir con el siguiente: un change que depende de otro arranca en cuanto ese otro está entregado, y uno que depende de una pregunta abierta espera mientras los demás siguen. Antes de hacer algo por su cuenta te dice qué hará, por qué, y que escribiendo "para" lo detienes. Solo te interrumpe por algo que bloquea: una regla obligatoria que habría que romper, una decisión costosa que nadie especificó, un proyecto que dejó de estar sano o una revisión que llegó a su tercera ronda sin resolverse. Cada respuesta suya termina con una línea que dice qué necesita de ti: 🔴 bloqueado, 🟡 tu opinión, 🟢 nada.</p>
-          <p lang="en">Buddy hands each change to Dev, who builds it to the project's standards and the prototype screens it covers, ticks off each step and commits when done. Buddy doesn't wait for your acceptance before moving on: a change that depends on another starts as soon as that one is delivered, and one waiting on an open question holds while the rest carry on. Before doing anything on his own, he tells you what he is about to do, why, and that typing "stop" will halt him. He only interrupts you for something blocking: a mandatory rule that would have to be broken, a costly decision nobody specified, a project that is no longer healthy, or a review still unresolved after three rounds. Every reply he gives ends with one line saying what he needs from you: 🔴 blocked, 🟡 your input, 🟢 nothing.</p>
+          <p lang="es">Buddy le entrega cada change a Dev, que construye con los estándares del proyecto y las pantallas del prototipo que cubre, marca cada paso y hace commit al cerrar. Buddy no espera a que aceptes uno para seguir con el siguiente: un change que depende de otro arranca en cuanto ese otro está entregado, y uno que depende de una pregunta abierta espera mientras los demás siguen. Antes de hacer algo por su cuenta te dice qué hará, por qué, y que escribiendo "para" lo detienes. Solo te interrumpe por algo que bloquea: una regla obligatoria que habría que romper, una decisión costosa que nadie especificó, un proyecto que dejó de estar sano o una pieza cuya revisión llegó a su tercera ronda sin resolverse (cada pieza cuenta sus propias rondas). Cada respuesta suya termina con una línea que dice qué necesita de ti: 🔴 bloqueado, 🟡 tu opinión, 🟢 nada.</p>
+          <p lang="en">Buddy hands each change to Dev, who builds it to the project's standards and the prototype screens it covers, ticks off each step and commits when done. Buddy doesn't wait for your acceptance before moving on: a change that depends on another starts as soon as that one is delivered, and one waiting on an open question holds while the rest carry on. Before doing anything on his own, he tells you what he is about to do, why, and that typing "stop" will halt him. He only interrupts you for something blocking: a mandatory rule that would have to be broken, a costly decision nobody specified, a project that is no longer healthy, or a piece whose review is still unresolved after three rounds (each piece counts its own). Every reply he gives ends with one line saying what he needs from you: 🔴 blocked, 🟡 your input, 🟢 nothing.</p>
           <p class="where only-desk" lang="es"><b>En la app</b>, la lista de tareas bajo el mensaje muestra en qué paso va. Deja la computadora encendida si te vas.</p>
           <p class="where only-desk" lang="en"><b>In the app</b>, the task list under his message shows which step he is on. Leave the computer on if you step away.</p>
           <p class="where only-cli" lang="es"><b>En la terminal</b>, deja la ventana abierta y la computadora encendida si te vas.</p>
@@ -1054,9 +1077,11 @@ claude plugin install buddy@buddy --scope local</pre>
         <div class="row"><h3 lang="es">Revisa el hito y acepta, change por change</h3><h3 lang="en">Review the milestone and accept each change</h3><span class="phase" lang="es">tú decides · como un sprint review</span><span class="phase" lang="en">your call · like a sprint review</span></div>
         <div class="body">
           <p lang="es">Aceptar nunca frena el trabajo: lo entregado te espera y Buddy sigue con lo siguiente. Cuando el hito está completo, Buddy corre una vez toda la suite de pruebas sobre el código de hoy (sirve dos días para todas las aceptaciones) y te da el <b>guion de la revisión</b>: lo prometido y lo entregado, en qué orden probar, y para cada change para qué sirve, cómo probarlo (qué hacer, qué deberías ver) y qué encontraron las revisiones.</p>
+          <p lang="es">Si el hito cubre pantallas del prototipo, antes de mostrártelas Buddy abre cada pantalla construida junto a la del prototipo con el navegador que tenga a mano, busca defectos evidentes (errores en la consola, texto cortado o encimado, desbordes en teléfono o pantalla ancha, estados que faltan, enlaces rotos), hace que Dev los corrija y te dice qué encontró, qué corrigió y en qué se aparta del prototipo.</p>
           <p lang="en">Accepting never holds up the work: delivered changes wait for you while Buddy moves on. When the milestone is complete, Buddy runs the full test suite once against the current code (one run covers every acceptance for two days) and gives you the <b>review script</b>: what was promised and what was delivered, the order to try things in, and for each change what it is for, how to try it (what to do, what you should see) and what the checks found.</p>
-          <p lang="es">Por cada change ves un resumen: lo que pediste con sus criterios, lo que confirmaste antes de construir, las decisiones que nadie anunció, dónde lo construido se aparta del prototipo y lo que el revisor encontró sin resolver. Aceptas, lo devuelves con lo que viste o anotas lo que notaste como un pedido nuevo. Si el código cambió después de su revisión, Buddy no te deja aceptarlo sin revisarlo de nuevo.</p>
-          <p lang="en">For each change you get a summary: what you asked for and its criteria, what you confirmed before the build, decisions nobody announced, where the build departs from the prototype, and anything the reviewer left unresolved. You accept it, send it back with what you saw, or log what you noticed as a new request. If the code changed after it was reviewed, Buddy won't let you accept it until it has been checked again.</p>
+          <p lang="en">If the milestone covers prototype screens, before showing them to you Buddy opens each built screen beside its prototype with whatever browser he has at hand, looks for evident defects (console errors, text cut off or overlapping, overflow on a phone or a wide screen, missing states, broken links), has Dev fix them and tells you what he found, what he fixed and where it departs from the prototype.</p>
+          <p lang="es">Por cada change ves un resumen: lo que pediste con sus criterios, lo que confirmaste antes de construir, las decisiones que nadie anunció, dónde lo construido se aparta del prototipo y las notas de las revisiones que siguen abiertas (una nota ya corregida no cuenta). Aceptas, lo devuelves con lo que viste o anotas lo que notaste como un pedido nuevo. Si el código cambió después de su revisión, Buddy no te deja aceptarlo sin revisarlo de nuevo.</p>
+          <p lang="en">For each change you get a summary: what you asked for and its criteria, what you confirmed before the build, decisions nobody announced, where the build departs from the prototype, and the review notes still open (one fixed since is not counted). You accept it, send it back with what you saw, or log what you noticed as a new request. If the code changed after it was reviewed, Buddy won't let you accept it until it has been checked again.</p>
           <p class="say" lang="es">Acepto registrar-app. En tablero, el desvío 1 no: quiero el gráfico como en el prototipo.</p>
           <p class="say" lang="en">register-app is accepted. On the dashboard, not deviation 1: I want the chart the way the prototype has it.</p>
           <p lang="es">El hito queda aceptado cuando todos sus changes lo están: ese es tu incremento. Buddy cierra diciendo qué cambió en lo pendiente por la revisión y te presenta la ficha del hito siguiente.</p>
@@ -1081,16 +1106,12 @@ claude plugin install buddy@buddy --scope local</pre>
           <p lang="en"><code>board</code> shows each milestone with its changes and whatever is waiting on you. <code>digest</code> tells you what changed since you last looked. Just ask Buddy in your own words.</p>
           <p class="say" lang="es">¿Cómo vamos?</p>
           <p class="say" lang="en">How are we doing?</p>
-          <p class="where only-desk" lang="es"><b>En la app</b>, pide el tablero como página (<code>board.html</code>) y ábrelo en el navegador de la app, al lado de la conversación.</p>
-          <p class="where only-desk" lang="en"><b>In the app</b>, ask for the board as a page (<code>board.html</code>) and open it in the app's browser, next to the conversation.</p>
-          <p class="where only-cli only-win" lang="es"><b>En la terminal</b>, el tablero sale como texto; como página, ábrela con <code>start board.html</code>.</p>
-          <p class="where only-cli only-win" lang="en"><b>In the terminal</b>, the board is printed as text; to see it as a page, open it with <code>start board.html</code>.</p>
-          <p class="where only-cli only-mac" lang="es"><b>En la terminal</b>, el tablero sale como texto; como página, ábrela con <code>open board.html</code>.</p>
-          <p class="where only-cli only-mac" lang="en"><b>In the terminal</b>, the board is printed as text; to see it as a page, open it with <code>open board.html</code>.</p>
-          <p class="where only-cli only-linux" lang="es"><b>En la terminal</b>, el tablero sale como texto; como página, ábrela con <code>xdg-open board.html</code>.</p>
-          <p class="where only-cli only-linux" lang="en"><b>In the terminal</b>, the board is printed as text; to see it as a page, open it with <code>xdg-open board.html</code>.</p>
-          <p lang="es">El tablero dice qué se construye <b>ahora</b> y qué viene <b>después</b>, la prioridad de cada change y a qué otro espera, y avisa de lo que espera por ti: prioridades o dependencias por confirmar, incoherencias en el orden. Todo sale de un índice que lee los registros una vez y responde en menos de dos segundos; <code>buddy find</code> busca en él por palabras. <code>buddy minutes</code> estima cuántos minutos tuyos costó cada change, leyendo lo que escribiste y leíste en las conversaciones, y cuánto esperó el trabajo por ti. Es un piso: no cuenta el tiempo que pasas probando o pensando lejos de la conversación.</p>
-          <p lang="en">The board shows what is being built <b>now</b> and what comes <b>next</b>, each change's priority and what it is waiting on, and flags what is waiting on you: priorities or dependencies to confirm, inconsistencies in the order. It all comes from an index that reads the records once and answers in under two seconds; <code>buddy find</code> searches it by keyword. <code>buddy minutes</code> estimates how much of your time each change took, based on what you wrote and read in the conversations, and how long work waited on you. Treat it as a lower bound: it doesn't count time spent trying things out or thinking away from the conversation.</p>
+          <p class="where" lang="es"><b>El tablero como página</b>: pídeselo a Buddy y ábrelo en el navegador (<code>.buddy/board.html</code>); se refresca solo mientras se trabaja. Arriba, lo que espera por ti en tus palabras, lo que se construye ahora y lo que viene, y lo que cambió desde la última vez; un porcentaje general y una fila por hito; los changes del hito en curso en cuatro grupos, con tu prueba al final del grupo que te espera. Dos colores: el del agente y el tuyo. Al final, plegado, cómo va el proceso: el tiempo medio en cada etapa, cuántas veces se te preguntó y cuánto esperó el trabajo por ti, y la mezcla de trabajo de los últimos 14 días. En español o inglés, en teléfono o pantalla ancha, claro u oscuro.</p>
+          <p class="where" lang="en"><b>The board as a page</b>: ask Buddy for it and open it in your browser (<code>.buddy/board.html</code>); it refreshes itself while the work goes on. At the top, what waits for you in your words, what is being built now and what comes next, and what changed since you last looked; one overall percentage and one row per milestone; the changes of the milestone in progress in four groups, with your own test at the end of the group waiting for you. Two colours: the agent's and yours. At the end, folded, how the process is going: the average time in each stage, how many times you were asked and how long work waited for you, and the work mix of the last 14 days. In Spanish or English, on a phone or a wide screen, light or dark.</p>
+          <p class="where" lang="es"><b>El panel</b>, junto a la conversación en Claude Code o en Antigravity App, muestra lo mismo en corto, con un botón por cada cosa que te espera (Probar y aceptar, Responder, Decidir…) que escribe tu pedido en la caja de texto para que lo envíes.</p>
+          <p class="where" lang="en"><b>The panel</b>, beside the conversation in Claude Code or Antigravity App, shows the same in short, with a button for each thing waiting for you (Try and accept, Answer, Decide…) that writes your request in the text box for you to send.</p>
+          <p lang="es">El tablero dice qué se construye <b>ahora</b> y qué viene <b>después</b>, la prioridad de cada change y a qué otro espera, y avisa de lo que espera por ti: prioridades o dependencias por confirmar, incoherencias en el orden. Todo sale de un índice que lee los registros una vez y responde en menos de dos segundos; <code>buddy find</code> busca en él por palabras. <code>buddy minutes</code> cuenta cuántas veces cada change te preguntó algo y cuánto esperó el trabajo por ti, leído de los registros; no es tu tiempo de trabajo.</p>
+          <p lang="en">The board shows what is being built <b>now</b> and what comes <b>next</b>, each change's priority and what it is waiting on, and flags what is waiting on you: priorities or dependencies to confirm, inconsistencies in the order. It all comes from an index that reads the records once and answers in under two seconds; <code>buddy find</code> searches it by keyword. <code>buddy minutes</code> counts how many times each change asked you something and how long work waited on you, read from the records; it is not your working time.</p>
         </div>
       </li>
       <li>
@@ -1222,6 +1243,8 @@ claude plugin update buddy@buddy</pre>
           <li><b>El checkpoint</b><span>Evidencia, revisor y guardia de aceptación.</span></li>
           <li><b>El hook de commits</b><span>Formato del mensaje y secretos, antes de cada commit.</span></li>
           <li><b>El modo vibe</b><span>Para arreglar rápido sin saltarse los estándares.</span></li>
+          <li><b>Discovery y la revisión del hito</b><span>De una idea a un prototipo probado; y la demostración al final de cada hito.</span></li>
+          <li><b>Los paneles</b><span>Opcionales, un plugin aparte para Claude Code y otro para Antigravity App.</span></li>
         </ul>
         <ul lang="en">
           <li><b>Buddy</b><span>The main conversation: the only one you talk to.</span></li>
@@ -1230,6 +1253,8 @@ claude plugin update buddy@buddy</pre>
           <li><b>The checkpoint</b><span>Evidence, reviewer and acceptance guard.</span></li>
           <li><b>The commit hook</b><span>Message format and secrets, before every commit.</span></li>
           <li><b>Vibe mode</b><span>Quick fixes that still follow the standards.</span></li>
+          <li><b>Discovery and the milestone review</b><span>From an idea to a tested prototype; and the demonstration at the end of each milestone.</span></li>
+          <li><b>The panels</b><span>Optional, one plugin for Claude Code and another for Antigravity App.</span></li>
         </ul>
       </div>
       <div class="part">
@@ -1237,22 +1262,28 @@ claude plugin update buddy@buddy</pre>
         <ul lang="es">
           <li><b>Estándares generales</b><span>Siempre al día: tests, secretos, proporción al riesgo, nada falla en silencio.</span></li>
           <li><b>Estándares del perfil</b><span>Nacen con el proyecto y pasan a ser suyos: .NET 10, React 19.</span></li>
-          <li><b>Plantillas</b><span><code>empty</code> y <code>dotnet-react</code>, con su CI, Semgrep y gitleaks.</span></li>
+          <li><b>Plantillas</b><span><code>empty</code> y <code>dotnet-react</code> (con Tailwind y shadcn/ui), con su CI, Semgrep y gitleaks.</span></li>
+          <li><b>Reglas de diseño y temas</b><span>Contraste, teclado, formularios…; y temas de color que eliges en discovery.</span></li>
           <li><b>Tu biblioteca</b><span>Una empresa puede tener la suya, con la misma forma.</span></li>
         </ul>
         <ul lang="en">
           <li><b>General standards</b><span>Always current: tests, secrets, effort proportional to risk, no silent failures.</span></li>
           <li><b>Profile standards</b><span>Copied in when the project is created, then owned by it: .NET 10, React 19.</span></li>
-          <li><b>Templates</b><span><code>empty</code> and <code>dotnet-react</code>, with their CI, Semgrep and gitleaks.</span></li>
+          <li><b>Templates</b><span><code>empty</code> and <code>dotnet-react</code> (with Tailwind and shadcn/ui), with their CI, Semgrep and gitleaks.</span></li>
+          <li><b>Design rules and themes</b><span>Contrast, keyboard, forms…; and colour themes you choose during discovery.</span></li>
           <li><b>Your library</b><span>A company can have its own, with the same structure.</span></li>
         </ul>
       </div>
       <div class="part">
         <h3><span lang="es">Tu proyecto</span><span lang="en">Your project</span></h3>
 <pre class="tree" lang="es" aria-label="Carpetas de un proyecto creado con Buddy">CLAUDE.md        <span class="c">apunta a Buddy</span>
+AGENTS.md        <span class="c">lo mismo, para Antigravity</span>
+.buddy/          <span class="c">local: la página del tablero</span>
 <span class="k">docs/</span>
   context.md     <span class="c">el negocio, confirmado por ti</span>
   inputs/        <span class="c">PRD, prototipo</span>
+  discovery/     <span class="c">brief, flujos, wireframes</span>
+  design/themes/ <span class="c">los temas</span>
   standards/     <span class="c">copiados al nacer</span>
   <span class="k">buddy/</span>
     requests.md  <span class="c">el mapa de lo pedido</span>
@@ -1262,9 +1293,13 @@ claude plugin update buddy@buddy</pre>
         changes/
     backlog/     <span class="c">lo de ningún hito</span></pre>
 <pre class="tree" lang="en" aria-label="Folders of a project created with Buddy">CLAUDE.md        <span class="c">points to Buddy</span>
+AGENTS.md        <span class="c">the same, for Antigravity</span>
+.buddy/          <span class="c">local: the board's page</span>
 <span class="k">docs/</span>
   context.md     <span class="c">the business, confirmed by you</span>
   inputs/        <span class="c">PRD, prototype</span>
+  discovery/     <span class="c">brief, flows, wireframes</span>
+  design/themes/ <span class="c">the themes</span>
   standards/     <span class="c">copied at creation</span>
   <span class="k">buddy/</span>
     requests.md  <span class="c">the map of requests</span>
@@ -1299,7 +1334,8 @@ claude plugin update buddy@buddy</pre>
 <span class="k">questions/</span>     <span class="c">lo que se pregunta antes de nacer</span>
 <span class="k">steps/</span>         <span class="c">checklists que confirmas línea a línea</span>
 <span class="k">normative/</span>     <span class="c">el índice de las normas citadas</span>
-<span class="k">prompts/</span>       <span class="c">los prompts guardados</span></pre>
+<span class="k">prompts/</span>       <span class="c">los prompts guardados</span>
+<span class="k">themes/</span>        <span class="c">los temas de color</span></pre>
 <pre class="tree" lang="en" aria-label="Folders of a library">library.json     <span class="c">name, contract, profiles</span>
 <span class="k">standards/</span>
   general/       <span class="c">for every project</span>
@@ -1311,7 +1347,8 @@ claude plugin update buddy@buddy</pre>
 <span class="k">questions/</span>     <span class="c">asked before the project is born</span>
 <span class="k">steps/</span>         <span class="c">checklists you confirm line by line</span>
 <span class="k">normative/</span>     <span class="c">the index of the standards cited</span>
-<span class="k">prompts/</span>       <span class="c">the saved prompts</span></pre>
+<span class="k">prompts/</span>       <span class="c">the saved prompts</span>
+<span class="k">themes/</span>        <span class="c">the colour themes</span></pre>
         <p class="muted" style="font-size:var(--step--1)" lang="es"><code>library.json</code> declara el número de contrato que sigue (Buddy avisa si necesita uno más nuevo), sus perfiles con una línea que dice qué traen y cuándo elegirlos, y el perfil por defecto. La plantilla usa los nombres <code>BuddyApp</code> y <code>buddy-app</code>, que Buddy reemplaza por los del proyecto. El contrato y el formato de cada parte están en la guía de bibliotecas de Buddy (<code>core/LIBRARY-GUIDE.md</code>), con un ejemplo de cada una.</p>
         <p class="muted" style="font-size:var(--step--1)" lang="en"><code>library.json</code> declares the contract version it follows (Buddy warns you if he needs a newer one), its profiles, each with a line on what it includes and when to choose it, and the default profile. The template uses the names <code>BuddyApp</code> and <code>buddy-app</code>, which Buddy replaces with the project's own. The contract and the format of each part are in Buddy's library guide (<code>core/LIBRARY-GUIDE.md</code>), with an example of each.</p>
       </div>
@@ -1328,8 +1365,8 @@ claude plugin update buddy@buddy</pre>
           <li><b>Evergreen</b><span>The general standards: the project keeps the version it was born from, and may later move to a new version of the library by copying them over (<code>docs/standards/ORIGIN.md</code> says how). Buddy does not yet tell a project when its library publishes a version; that is planned.</span></li>
           <li><b>The project's own</b><span>Its answers and decisions: never overwritten.</span></li>
         </ul>
-        <p class="later" lang="es">Desde la 0.4.0 la biblioteca suma preguntas al nacer, pasos propios de cada perfil, documentos normativos (archivos o enlaces, con su versión) y prompts guardados para los controles de la organización.</p>
-        <p class="later" lang="en">From 0.4.0, the library also adds questions at project creation, profile-specific steps, normative documents (files or links, with their version) and saved prompts for the organisation's controls.</p>
+        <p class="later" lang="es">Desde la 0.4.0 la biblioteca suma preguntas al nacer, pasos propios de cada perfil, documentos normativos (archivos o enlaces, con su versión) y prompts guardados para los controles de la organización. Desde la 0.5.0, también temas de color y reglas de diseño (un <code>design.md</code> entre sus estándares).</p>
+        <p class="later" lang="en">From 0.4.0, the library also adds questions at project creation, profile-specific steps, normative documents (files or links, with their version) and saved prompts for the organisation's controls. From 0.5.0, colour themes and design rules too (a <code>design.md</code> among its standards).</p>
       </div>
       <div class="part">
         <h3 lang="es">3. Cómo se usa</h3>
@@ -1451,7 +1488,7 @@ buddy init --list-profiles</pre>
     <div class="note" lang="en"><b>Small on purpose.</b> Buddy doesn't add steps or commands for their own sake: every new mechanism has to prove on real projects that it earns its place. An automated test stops him from growing past his size budget, and whatever goes unused is removed. Less process means less to learn and less to slow you down.</div>
     <div class="status">
       <div>
-        <span class="pill wait" style="justify-self:start"><span lang="es">publicada · 0.4.0 · la actual</span><span lang="en">released · 0.4.0 · the current one</span></span>
+        <span class="pill wait" style="justify-self:start"><span lang="es">publicada · 0.4.0</span><span lang="en">released · 0.4.0</span></span>
         <ul lang="es">
           <li>Al crear un proyecto, Buddy dice primero qué biblioteca usará, por qué esa y cómo cambiarla.</li>
           <li>Las preguntas de la biblioteca antes de nacer, un perfil recomendado con su razón, y tus respuestas completan los valores abiertos de los estándares.</li>
@@ -1478,24 +1515,32 @@ buddy init --list-profiles</pre>
         </ul>
       </div>
       <div>
-        <span class="pill wait" style="justify-self:start"><span lang="es">en diseño · 0.5.0</span><span lang="en">in design · 0.5.0</span></span>
+        <span class="pill wait" style="justify-self:start"><span lang="es">publicada · 0.5.0 · la actual</span><span lang="en">released · 0.5.0 · the current one</span></span>
         <ul lang="es">
-          <li>Buddy te acompaña desde antes del PRD: la investigación, las entrevistas, el brief del proyecto, los wireframes y el prototipo.</li>
-          <li>Un tablero vivo que se refresca solo en el navegador, sacado siempre de los registros.</li>
-          <li>Dos colores en toda la página, el del agente y el tuyo, para ver de un vistazo qué depende de ti.</li>
-          <li>Un camino numerado hasta la publicación, una tarjeta por hito y tu prueba al final de cada grupo de trabajo.</li>
-          <li>Tiempos de ciclo por change y por etapa, riesgos abiertos y lo que espera a terceros.</li>
-          <li>La página en tu idioma.</li>
-          <li>Plantillas con base de datos: SQLite o LocalDB.</li>
+          <li>Buddy te acompaña desde antes del PRD: investigación, entrevistas, el brief, los flujos, los wireframes y un prototipo probado con usuarios, empezando donde ya estás.</li>
+          <li>Temas de color y reglas de diseño de la biblioteca, o tu propia propuesta visual convertida en tema; la biblioteca por defecto trae temas, shadcn/ui, reglas de diseño y reglas para prototipos.</li>
+          <li>El prototipo pasa siempre por una auditoría de usabilidad antes de confirmarse.</li>
+          <li>Un tablero vivo que se refresca solo en el navegador, en tu idioma, con dos colores (el del agente y el tuyo) y cómo va el proceso.</li>
+          <li>Un panel junto a la conversación, en Claude Code y en Antigravity App.</li>
+          <li>Buddy funciona en Antigravity (CLI, App e IDE), y Dev y el revisor trabajan en la herramienta donde hablas con él.</li>
+          <li>Al revisar el hito, las pantallas se comparan con el prototipo y los defectos se corrigen antes de que las veas.</li>
+          <li>El origen de cada criterio se estudia al inicio; las rondas de revisión se cuentan por pieza; solo cuentan las notas abiertas.</li>
+          <li>Puedes reformular el objetivo de un hito y reordenar los changes.</li>
+          <li>Pruebas en niveles: rápidas al aceptar un change, la suite completa al cerrar un hito.</li>
+          <li>Más pequeño: se quitaron <code>scope</code>, <code>migrate</code> y la lectura del prototipo por el programa.</li>
         </ul>
         <ul lang="en">
-          <li>Buddy is with you before the PRD exists: research, interviews, the project brief, wireframes and the prototype.</li>
-          <li>A live board that refreshes itself in the browser, always built from the records.</li>
-          <li>Two colours across the page, one for the agent and one for you, so you can see at a glance what depends on you.</li>
-          <li>A numbered path to the release, one card per milestone and your test at the end of each group of work.</li>
-          <li>Cycle times per change and stage, open risks, and what is waiting on third parties.</li>
-          <li>The page in your language.</li>
-          <li>Templates with a database: SQLite or LocalDB.</li>
+          <li>Buddy is with you before the PRD exists: research, interviews, the brief, the flows, wireframes and a prototype tested with users, starting where you already are.</li>
+          <li>Colour themes and design rules from the library, or your own visual proposal turned into a theme; the default library brings themes, shadcn/ui, design rules and rules for prototypes.</li>
+          <li>A prototype always goes through a usability audit before it is confirmed.</li>
+          <li>A live board that refreshes itself in the browser, in your language, with two colours (the agent's and yours) and how the process is going.</li>
+          <li>A panel beside the conversation, in Claude Code and in Antigravity App.</li>
+          <li>Buddy works in Antigravity (CLI, App and IDE), and Dev and the reviewer work in the tool you talk to him in.</li>
+          <li>At the milestone review, the screens are compared with the prototype and defects are fixed before you see them.</li>
+          <li>Each criterion's source is studied up front; review rounds are counted per piece; only open notes count.</li>
+          <li>You can reword a milestone's goal and reorder changes.</li>
+          <li>Tests in levels: fast ones to accept a change, the whole suite to close a milestone.</li>
+          <li>Smaller: <code>scope</code>, <code>migrate</code> and the program's own reading of the prototype are gone.</li>
         </ul>
       </div>
     </div>

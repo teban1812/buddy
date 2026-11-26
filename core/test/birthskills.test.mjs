@@ -22,6 +22,7 @@ test('AC2: new-project loads intake to read the PRD or the prototype instead of 
   assert.match(birth, /read it now by loading the `intake` skill of this plugin/);
   for (const moved of ['buddy requests add', 'prototype facts', 'reading.json', 'MoSCoW']) assert.ok(!birth.includes(moved), moved);
   for (const kept of ['buddy requests add', 'buddy requests priority', 'buddy requests depend', 'buddy requests order', 'buddy queue new', 'prototype facts', 'reading.json', 'prototype confirm --all', 'data-buddy-zone="fixed"']) assert.ok(skill('intake').includes(kept), kept);
+  assert.match(skill('intake'), /"flows": \[\{ "from", "to", "via", "evidence": \["[^"]+"\] \}\]/, 'R276 AC2: flow evidence in reading.json example is a list');
 });
 test('AC1, AC2, AC3: Buddy\'s main instructions point to each skill in a short paragraph, keep what applies after intake, and are shorter', () => {
   const para = lead => { const at = buddy.indexOf(lead); assert.ok(at > 0, lead); return buddy.slice(at, buddy.indexOf('\n', at)); };

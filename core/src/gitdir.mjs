@@ -1,6 +1,6 @@
-// Where Buddy keeps what is not worth the history (R134): `buddy/` inside the repository's git folder. In a plain repository that folder
-// is `<repo>/.git`; in a git worktree `.git` is a one-line file and the folder is the worktree's own one inside the main repository, which
-// git names (R146): each worktree keeps its own hand-overs, index and marks. Every module asks here instead of assuming `.git` is a folder.
+// Where Buddy keeps what is not worth the history (R134, ADR move-local-state-to-dot-buddy): `.buddy/` at the project root, ignored by `.gitignore`.
+// Living inside the workspace keeps all routine Buddy commands (board, digest, resume, handovers, workers, suite) writable inside Antigravity's
+// terminal sandbox (which makes `.git/` read-only by default), while still keeping each git worktree isolated in its own working tree (R146).
 import fs from 'node:fs';
 import path from 'node:path';
 import { git } from './proc.mjs';
@@ -17,5 +17,27 @@ export function gitDir(repo) {
   if (dir) asked.set(key, dir); return dir;
 }
 export const isGitRepo = repo => gitDir(repo) !== null;
-// Buddy's folder in it: `<git folder>/buddy`; outside a git repository, `<repo>/.git/buddy` as before (the callers that need git say so).
-export const buddyDir = repo => path.join(gitDir(repo) ?? path.join(repo, '.git'), 'buddy');
+export const BUDDY_LOCAL = '.buddy';
+// Buddy's local unversioned folder: `<repo>/.buddy` (in a plain repo and in each worktree).
+export const buddyDir = repo => path.join(repo, BUDDY_LOCAL);
+
+// Ensures `.buddy/` is listed in `<repo>/.gitignore` so local state is never committed. Returns true if `.gitignore` was created or updated.
+export function ensureBuddyIgnored(repo) {
+  const gi = path.join(repo, '.gitignore');
+  const existing = fs.existsSync(gi) ? fs.readFileSync(gi, 'utf8') : '';
+  if (existing.split(/\r?\n/).some(l => /^\.buddy\/?$/.test(l.trim()))) return false;
+  const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+  fs.writeFileSync(gi, `${existing}${prefix}.buddy/\n`);
+  return true;
+}
+
+// Ensures `<repo>/.buddy` (or a subdirectory of it) exists. Does not touch `.gitignore` (which belongs to the project's versioned files and is updated by `buddy init`);
+// instead writes `.buddy/.gitignore` with `*` so git always ignores everything inside `.buddy/` without modifying the repository's own `.gitignore`.
+export function ensureBuddyDir(repo, ...sub) {
+  const base = buddyDir(repo);
+  const dir = path.join(base, ...sub);
+  fs.mkdirSync(dir, { recursive: true });
+  const gi = path.join(base, '.gitignore');
+  if (!fs.existsSync(gi)) fs.writeFileSync(gi, '*\n');
+  return dir;
+}

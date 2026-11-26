@@ -16,6 +16,7 @@ import { confirmAllAssumed, loadBatchFile, createBatch, writeBatchFile, cards, a
 import { analyseAnswers, buildAnalysisPrompt, claudeAsk } from '../src/analysis.mjs';
 import { changeDirOf } from '../src/slicestore.mjs';
 import { named } from '../src/ids.mjs';
+import { recordApproval } from '../src/proc.mjs';
 
 const argv = process.argv.slice(2); const cmd = argv.shift(); const pos = []; const o = {}; const flags = new Set(['delegated', 'dry', 'all']);
 for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith('--')) { const k = argv[i].slice(2); if (flags.has(k)) o[k] = true; else o[k] = argv[++i]; } else pos.push(argv[i]); }
@@ -30,15 +31,15 @@ try {
   } else if (cmd === 'show') console.log(cards(loadBatchFile(need(pos[0], '<file>'))));
   else if (cmd === 'answer') {
     const f = need(pos[0], '<file>'); const b = loadBatchFile(f);
-    answerQuestion(b, need(o.q, '--q'), { option: o.option, text: o.text, delegated: !!o.delegated }); writeBatchFile(f, b); console.log(cards(b, { only: o.q }));
+    answerQuestion(b, need(o.q, '--q'), { option: o.option, text: o.text, delegated: !!o.delegated }); writeBatchFile(f, b); console.log(cards(b, { only: o.q })); recordApproval(process.cwd(), [f], `answer to ${o.q}`);
   } else if (cmd === 'assume') {
     const f = need(pos[0], '<file>'); const b = loadBatchFile(f); const applied = assumeDefaults(b);
     if (blockingOpen(b).length) { console.error(`blocking question(s) still open: ${blockingOpen(b).map(q => named(q.situation, q.id)).join(' | ')}`); process.exit(3); }
     writeBatchFile(f, b); console.log(`assumed defaults for: ${applied.join(', ') || '(none)'}`);
   } else if (cmd === 'confirm') {
     const f = need(pos[0], '<file>'); const b = loadBatchFile(f);
-    if (o.all) { const ids = confirmAllAssumed(b); writeBatchFile(f, b); console.log(`confirmed ${ids.length} assumed default(s): ${ids.join(', ') || '(none)'}`); }
-    else { confirmAssumed(b, need(o.q, '--q (or --all)'), { option: o.option }); writeBatchFile(f, b); console.log(cards(b, { only: o.q })); }
+    if (o.all) { const ids = confirmAllAssumed(b); writeBatchFile(f, b); console.log(`confirmed ${ids.length} assumed default(s): ${ids.join(', ') || '(none)'}`); if (ids.length) recordApproval(process.cwd(), [f], `confirmation of the assumed defaults ${ids.join(', ')}`); }
+    else { confirmAssumed(b, need(o.q, '--q (or --all)'), { option: o.option }); writeBatchFile(f, b); console.log(cards(b, { only: o.q })); recordApproval(process.cwd(), [f], `confirmation of the assumed default ${o.q}`); }
   } else if (cmd === 'status') {
     const b = loadBatchFile(need(pos[0], '<file>')); const bo = blockingOpen(b);
     console.log(bo.length ? `waiting for the human on ${bo.length} blocking question(s): ${bo.map(q => `${q.situation} [${q.id}]`).join(' | ')}` : `batch ${b.id}: ${b.status}`); process.exit(bo.length ? 3 : 0);

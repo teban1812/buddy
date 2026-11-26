@@ -1,7 +1,7 @@
 # Report format
 
 ## Where the report lives
-- **The prototype**: `docs/inputs/prototype/ux-audit.md`, beside the prototype it judges. Only the HTML there is the prototype, so the report does not disturb the manifest.
+- **The prototype**: `docs/discovery/ux-audit.md`, never inside `docs/inputs/prototype/`: `docs/inputs/` holds only what the owner hands over, and Buddy writes in `docs/discovery/`.
 - **One change**: `qa/ux-report.md` inside the change's folder (`docs/buddy/milestones/<milestone>/changes/<date>-<name>/qa/ux-report.md`, or under `docs/buddy/backlog/`), beside the QA audit's `qa/report.md`. Always in `qa/`, never as a `.md` next to `change.md`: Buddy reads the files beside `change.md` as pieces of the change.
 - **The whole app**: each change's module in its own `qa/ux-report.md`; the parts no change covers in `docs/qa/ux-<module>.md`; the consistency pass and the goal check in `docs/qa/ux-app.md`.
 - Screenshots go beside the report, referenced by a relative path.
@@ -39,7 +39,7 @@ Two sections keep the rest credible:
 - **Suggestions**: improvements with no principle or criterion behind them. Never counted in the totals. If everything you found is a suggestion, say so plainly: that is a real result.
 - **Handed to QA**: functional bugs tripped over. One line each, no investigation.
 
-## Template: the prototype (`docs/inputs/prototype/ux-audit.md`)
+## Template: the prototype (`docs/discovery/ux-audit.md`)
 
 ```markdown
 # Usability audit of the prototype, <date>

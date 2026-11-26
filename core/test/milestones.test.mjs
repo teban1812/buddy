@@ -4,17 +4,16 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { spawnSync, execFileSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { startSlice, startMilestone, moveChangeTo, listSlices, listMilestones, changesOf, readSlice, moveSlice, stepAddTo, renameSlice, changeDirOf } from '../src/slicestore.mjs';
 import { verify } from '../src/verify.mjs';
 import { createBatch, writeBatchFile } from '../src/queue.mjs';
 import { loadBoard, boardText, boardHtml } from '../src/board.mjs';
 import { digest } from '../src/digest.mjs';
-import { migrate } from '../src/migrate.mjs';
 import { canonicalText } from '../src/slice.mjs';
 
 // Milestones and the backlog (R118): docs/buddy/milestones/<date>-<name>/milestone.md with its changes in changes/, docs/buddy/backlog/
-// for the changes of no milestone, and docs/buddy/changes/ read as the backlog until `buddy migrate` moves it.
+// for the changes of no milestone.
 const BUDDY = fileURLToPath(new URL('../bin/buddy.mjs', import.meta.url));
 const NOW = '2026-10-31T18:00:00Z';
 const repo = () => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'ms-')); fs.mkdirSync(path.join(d, 'docs')); return d; };
@@ -116,40 +115,12 @@ test('the board groups the changes under their milestone, then the backlog; with
   assert.deepEqual(b.milestones.map(m => [m.id, m.status, m.changes]), [['mvp', 'refining', { accepted: 0, total: 1 }]]);
   assert.deepEqual(b.slices.map(r => [r.id, r.milestone]), [['loose-fix', null], ['save-books', 'mvp'], ['storage', 'mvp']]);
   const text = boardText(b);
-  assert.match(text, /\nMILESTONE  mvp  First release  · refining · 0 of 1 change\(s\) accepted\n\n  refining \(1\)\n    storage  feat     Storage  <Save books \[save-books\]>  · [^\n]+\n\n  ready \(1\)\n    save-books  feat     Save books  · [^\n]+\n\nBACKLOG  1 change\(s\) of no milestone\n\n  refining \(1\)\n    loose-fix  fix      Loose fix  · [^\n]+\n$/);
-  const html = boardHtml(b); assert.ok(html.indexOf('Milestone: First release') < html.indexOf('Backlog: changes of no milestone')); assert.equal(html.match(/class="cols"/g).length, 2);
+  assert.match(text, /\nMILESTONE  mvp  First release  · refining · 0 of 1 change\(s\) accepted \(1 in progress\)\n\n  refining \(1\)\n    storage  feat     Storage  <Save books \[save-books\]>  · [^\n]+\n\n  ready \(1\)\n    save-books  feat     Save books  · [^\n]+\n\nBACKLOG  1 change\(s\) of no milestone\n\n  refining \(1\)\n    loose-fix  fix      Loose fix  · [^\n]+\n$/);
+  const html = boardHtml(b); assert.ok(html.indexOf('First release') < html.indexOf('Changes of no milestone')); assert.equal(html.match(/<article class="ms">/g).length, 1); assert.match(html, /<details class="fold">/);
   const empty = repo(); mvp(empty); assert.match(boardText(loadBoard(empty, NOW)), /MILESTONE  mvp  First release  · refining · 0 of 0 change\(s\) accepted\n  \(no changes yet\)\n\nBACKLOG  0 change\(s\) of no milestone\n$/);
 });
 
-test('docs/buddy/changes/ is read as the backlog until migrate moves it to docs/buddy/backlog/ with git mv, so the files keep their history', () => {
-  const d = repo(); execFileSync('git', ['init', '-q'], { cwd: d });
-  const a = change(d, 'Save books'); const b = change(d, 'Loose fix'); change(d, 'Storage', { inChange: a.id });
-  fs.renameSync(path.join(d, 'docs/buddy/backlog'), path.join(d, 'docs/buddy/changes'));                  // the layout of before milestones
-  assert.deepEqual(problems(d), []); assert.equal(rel(d, readSlice(d, a.id).file), 'docs/buddy/changes/2026-10-31-save-books/change.md');
-  assert.deepEqual(listSlices(d).map(x => [x.data.id, x.milestone]), [['save-books', null], ['loose-fix', null], ['storage', null]]);
-  assert.deepEqual(loadBoard(d, NOW).slices.map(r => r.id), ['save-books', 'loose-fix', 'storage']);
-  mvp(d); assert.equal(moveChangeTo(d, b.id, 'mvp').to, 'mvp');                                             // a change moves out of it like out of the backlog
-  const n = change(d, 'New one'); assert.equal(rel(d, n.file), 'docs/buddy/backlog/2026-10-31-new-one/change.md');   // new changes go to the backlog
-  execFileSync('git', ['add', '--', 'docs'], { cwd: d });
-  execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', `core.hooksPath=${os.tmpdir()}`, 'commit', '-q', '-m', 'before'], { cwd: d });
-  fs.writeFileSync(path.join(d, 'docs/buddy/changes/2026-10-31-save-books/notes.txt'), 'untracked, moves too');
-  const dry = migrate(d, { dry: true }); assert.deepEqual(dry.moves, [{ from: 'docs/buddy/changes/2026-10-31-save-books', to: 'docs/buddy/backlog/2026-10-31-save-books', folder: true }]);
-  assert.ok(fs.existsSync(path.join(d, 'docs/buddy/changes')));
-  const r = migrate(d); assert.equal(r.moves.length, 1); assert.ok(!fs.existsSync(path.join(d, 'docs/buddy/changes')));
-  assert.ok(fs.existsSync(path.join(d, 'docs/buddy/backlog/2026-10-31-save-books/notes.txt')));
-  const staged = execFileSync('git', ['diff', '--cached', '--name-status', '-M'], { cwd: d, encoding: 'utf8' });
-  assert.match(staged, /^R100\tdocs\/buddy\/changes\/2026-10-31-save-books\/change\.md\tdocs\/buddy\/backlog\/2026-10-31-save-books\/change\.md$/m);
-  assert.match(staged, /^R100\tdocs\/buddy\/changes\/2026-10-31-save-books\/storage\.md\tdocs\/buddy\/backlog\/2026-10-31-save-books\/storage\.md$/m);
-  assert.deepEqual(problems(d), []); assert.equal(readSlice(d, 'storage').change, 'save-books');
-  assert.equal(migrate(d).nothing, true);                                                                   // a second run finds nothing
-  // without git, the folders are renamed; a folder already in the backlog stops everything before anything moves
-  const e = repo(); change(e, 'One'); fs.renameSync(path.join(e, 'docs/buddy/backlog'), path.join(e, 'docs/buddy/changes'));
-  fs.mkdirSync(path.join(e, 'docs/buddy/backlog/2026-10-31-one'), { recursive: true });
-  assert.throws(() => migrate(e), /docs\/buddy\/backlog\/2026-10-31-one already exists/); assert.ok(fs.existsSync(path.join(e, 'docs/buddy/changes/2026-10-31-one/change.md')));
-  fs.rmSync(path.join(e, 'docs/buddy/backlog'), { recursive: true }); assert.equal(migrate(e).moves.length, 1); assert.deepEqual(problems(e), []);
-});
-
-test('the CLI: milestone start, start --milestone, move-to, status grouped, migrate', () => {
+test('the CLI: milestone start, start --milestone, move-to, status grouped', () => {
   const d = repo();
   const m = run(d, 'milestone', 'start', 'First release', '--name', 'mvp', '--request', 'The smallest useful list', '--ac', 'Works', '--exclude', 'Sharing');
   assert.equal(m.status, 0, m.stderr); assert.match(m.stdout, /^started the milestone mvp \(refining\)\n/);
@@ -162,7 +133,6 @@ test('the CLI: milestone start, start --milestone, move-to, status grouped, migr
   const back = run(d, 'move-to', 'save-books', 'backlog'); assert.match(back.stdout, /^save-books moved to the backlog: /);
   const bad = run(d, 'move-to', 'save-books', 'backlog'); assert.equal(bad.status, 1); assert.match(bad.stderr, /refused: .*\[save-books\] is already in the backlog/);
   assert.equal(run(d, 'move', 'mvp', 'ready').status, 0); assert.equal(spawnSync(process.execPath, [BUDDY, 'verify', '--canonical', path.join(d, 'docs', 'buddy')]).status, 0);
-  assert.match(run(d, 'migrate').stdout, /Nothing to migrate/);
 });
 
 test('questions at the level of a milestone: queue new --slice <milestone> writes the batch in its folder, and a blocking one keeps it from ready', () => {
@@ -192,4 +162,24 @@ test('a rename refused names the change, and the change that already has the nam
   const d = repo(); const a = change(d, 'Save books'); change(d, 'Export the list', { name: 'export' });
   assert.throws(() => renameSlice(d, a.id, a.id), e => e.message === 'Save books [save-books] already has that name');
   assert.throws(() => renameSlice(d, a.id, 'export'), e => e.message === 'the name export is taken by the change Export the list [export]; choose another with --name');
+});
+
+// R250: the owner rewords a milestone's goal; the earlier wording stays with its date, and the board, its page and the cards show the new one.
+test('the owner rewords a milestone\'s goal in any state: refused without --by owner, history kept, board and cards show it', () => {
+  const d = repo(); mvp(d); change(d, 'Save books', { milestone: 'mvp' });
+  const bad = run(d, 'milestone', 'goal', 'mvp', 'A list anyone can read'); assert.notEqual(bad.status, 0); assert.match(bad.stderr, /--by owner/);
+  assert.equal(readSlice(d, 'mvp').data.request, 'The smallest useful list');
+  for (const state of ['refining', 'ready']) {
+    if (state === 'ready') assert.equal(run(d, 'move', 'mvp', 'ready').status, 0);
+    const r = run(d, 'milestone', 'goal', 'mvp', `A list anyone can read (${state})`, '--by', 'owner'); assert.equal(r.status, 0, r.stderr);
+  }
+  const m = readSlice(d, 'mvp').data;
+  assert.equal(m.request, 'A list anyone can read (ready)');
+  assert.deepEqual(m.request_history.map(h => h.text), ['The smallest useful list', 'A list anyone can read (refining)']); assert.match(m.request_history[0].until, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);
+  assert.deepEqual(problems(d), []);
+  assert.equal(run(d, 'milestone', 'goal', 'save-books', 'x', '--by', 'owner').status, 1);   // a change is not a milestone
+  const b = loadBoard(d, NOW); assert.equal(b.milestones[0].request, 'A list anyone can read (ready)');
+  assert.match(boardHtml(b), /A list anyone can read \(ready\)/); assert.doesNotMatch(boardHtml(b), /The smallest useful list/);
+  assert.match(run(d, 'milestone', 'card', 'mvp').stdout, /A list anyone can read \(ready\)/);
+  assert.match(run(d, 'milestone', 'review', 'mvp').stdout, /A list anyone can read \(ready\)/);
 });

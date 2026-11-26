@@ -19,7 +19,8 @@
 //   all take [--repo <dir>]
 import { listSlices, listMilestones } from '../src/slicestore.mjs';
 import { refreshIndex } from '../src/index.mjs';
-import { addRequest, setRequest, removeRequest, listRequests, destinationText, requestTotals, requestTotalsText, setPriority, confirmPriorities, priorityWhyText, priorityOrigin, dependRequest, undependRequest, confirmRequest, confirmDependencies, confirmedDependenciesText, requestOrder, itemText, priorityText, dependsText } from '../src/requests.mjs';
+import { recordApproval } from '../src/proc.mjs';
+import { REQUESTS, addRequest, setRequest, removeRequest, listRequests, destinationText, requestTotals, requestTotalsText, setPriority, confirmPriorities, priorityWhyText, priorityOrigin, dependRequest, undependRequest, confirmRequest, confirmDependencies, confirmedDependenciesText, requestOrder, itemText, priorityText, dependsText } from '../src/requests.mjs';
 
 const argv = process.argv.slice(2); const pos = []; const o = { on: [] }; const bool = new Set(['json', 'open', 'assumed', 'proposed', 'priorities', 'dependencies']);
 for (let i = 0; i < argv.length; i++) {
@@ -52,11 +53,11 @@ try {
   } else if (cmd === 'confirm' && [pos.length > 0, !!o.priorities, !!o.dependencies].filter(Boolean).length > 1) {
     throw new Error('confirm <RQ id> (its dependencies), --priorities (every priority Buddy proposed) or --dependencies (every dependency Buddy proposed): not more than one');
   } else if (cmd === 'confirm' && o.dependencies) {
-    const done = confirmDependencies(repo); out({ confirmed: done }, confirmedDependenciesText(done));
+    const done = confirmDependencies(repo); out({ confirmed: done }, confirmedDependenciesText(done)); recordApproval(repo, [REQUESTS], 'confirmation of the dependencies Buddy proposed');
   } else if (cmd === 'confirm' && o.priorities) {
-    const ids = confirmPriorities(repo); out({ confirmed: ids }, ids.length ? `confirmed ${ids.length} ${ids.length === 1 ? 'priority' : 'priorities'} proposed by Buddy (${ids.join(', ')}): now yours` : 'no priority proposed by Buddy waits for confirmation');
+    const ids = confirmPriorities(repo); out({ confirmed: ids }, ids.length ? `confirmed ${ids.length} ${ids.length === 1 ? 'priority' : 'priorities'} proposed by Buddy (${ids.join(', ')}): now yours` : 'no priority proposed by Buddy waits for confirmation'); recordApproval(repo, [REQUESTS], 'confirmation of the priorities Buddy proposed');
   } else if (cmd === 'confirm') {
-    const r = confirmRequest(repo, need(pos[0], '<RQ id>')); out(r, `${r.id} ${dependsText(r)} (confirmed ${r.confirmed.join(', ')})`);
+    const r = confirmRequest(repo, need(pos[0], '<RQ id>')); out(r, `${r.id} ${dependsText(r)} (confirmed ${r.confirmed.join(', ')})`); recordApproval(repo, [REQUESTS], `confirmation of the dependencies of ${r.id}`);
   } else if (cmd === 'remove') {
     const r = removeRequest(repo, need(pos[0], '<RQ id>')); out(r, `removed ${r.id}`);
   } else if (cmd === 'order') {

@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// usage: worker.mjs register --slice <id> --role dev|reviewer|other --id <runtime id> [--runtime claude-code] [--pid N] [--session <id>]
+// usage: worker.mjs register --slice <id> --role dev|reviewer|other --id <runtime id> [--runtime claude-code|antigravity] [--pid N] [--session <id>]
 //        worker.mjs seen --id <id>                       a sign of life (Dev calls it as it works)
 //        worker.mjs finish --id <id> [--status done|stopped|lost]
 //        worker.mjs list [--slice <id>] [--json]         [--repo <dir>] on every command

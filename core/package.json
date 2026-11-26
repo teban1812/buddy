@@ -1,6 +1,6 @@
 {
   "name": "buddy-core",
-  "version": "0.4.0",
+  "version": "0.5.0",
   "private": true,
   "description": "Buddy core: human-checkpoint tooling for AI-assisted development (prototype, not a product).",
   "type": "module",
@@ -8,7 +8,8 @@
     "node": ">=22"
   },
   "scripts": {
-    "test": "node --test test/*.test.mjs"
+    "test": "node --test test/*.test.mjs",
+    "test:fast": "node test/run-fast.mjs"
   },
   "bin": {
     "buddy": "bin/buddy.mjs"

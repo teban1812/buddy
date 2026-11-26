@@ -6,7 +6,8 @@ import path from 'node:path';
 import { execFileSync } from 'node:child_process';
 import { checkpoint, reviewerPrompt } from '../src/checkpoint.mjs';
 import { howtoSet, startSlice, moveSlice, stepAddTo, stepSetIn, screensAdd, readSlice } from '../src/slicestore.mjs';
-import { readPrototype, draftManifest, confirmManifest, readManifest, screensBrief, MANIFEST } from '../src/prototype.mjs';
+import { draftOf, writeReading } from './_reading.helper.mjs';
+import { draftManifest, confirmManifest, readManifest, screensBrief, MANIFEST } from '../src/prototype.mjs';
 import { resumeBrief, briefText } from '../src/resume.mjs';
 
 const G = (cwd, ...a) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', '-c', 'commit.gpgsign=false', ...a], { cwd, encoding: 'utf8', stdio: 'pipe' });
@@ -17,7 +18,7 @@ const ok = () => ({ does_what_was_asked: true, weakens_or_hides_checks: false, u
 function setup({ screens = ['list', 'add'] } = {}) {
   const d = fs.mkdtempSync(path.join(os.tmpdir(), 'pi-')); G(d, 'init', '-q', '-b', 'main'); fs.mkdirSync(path.join(d, 'docs/inputs/prototype'), { recursive: true });
   fs.writeFileSync(path.join(d, 'package.json'), JSON.stringify({ name: 'x', scripts: { validate: 'node -e "0"' } })); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/index.html'), HTML);
-  fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(readPrototype([{ name: 'index.html', html: HTML }]), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
+  writeReading(d, HTML); fs.writeFileSync(path.join(d, MANIFEST), confirmManifest(draftManifest(draftOf(HTML), { date: '2026-11-01' }), { all: true, date: '2026-11-01' }).text);
   G(d, 'add', 'package.json', 'docs/inputs'); G(d, 'commit', '-qm', 'base');
   const s = startSlice({ repo: d, title: 'List and add books', request: 'Let the reader list and add books', criteria: ['It works'], excludes: ['Nothing beyond the criteria above'] });
   if (screens.length) screensAdd(d, s.id, screens);

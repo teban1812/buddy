@@ -30,6 +30,7 @@ Some rules protect the Product Owner, and Buddy keeps them whatever a library sa
 library.json                       what the library says about itself
 standards/
   general/                         the rules every project follows
+    design.md                      its design rules, optional
   <profile>/                       the rules of one profile
 templates/
   <profile>/                       the application a new project starts from
@@ -43,6 +44,9 @@ normative/
   index.md                         the documents the standards cite, and their versions
 prompts/
   <name>/SKILL.md                  a saved prompt of the organisation
+themes/
+  <name>.css                       a colour theme the owner may choose
+  <sample>.html                    optional sample page showing the library's themes
 ```
 
 Each profile needs its own standards, its template, or both. Every other part is optional, though a library should always have its `library.json`.
@@ -87,7 +91,7 @@ The text after the front matter is for people, unless this guide says otherwise.
 
 **Format.** A JSON object:
 - `name`: one line; Buddy names the library with it.
-- `contract`: a whole number, the version of the agreement between Buddy and the library. Contract 1 covers `library.json`, the standards and the templates. Contract 2 adds the questions, the steps, the normative documents and the saved prompts. A library that uses any of those declares `2`. Without `contract`, the library follows contract 1.
+- `contract`: a whole number, the version of the agreement between Buddy and the library. Contract 1 covers `library.json`, the standards and the templates. Contract 2 adds the questions, the steps, the normative documents, the saved prompts and the themes. A library that uses any of those declares `2`. Without `contract`, the library follows contract 1.
 - `default_profile`: the profile used when the owner names none. Without it, Buddy uses `dotnet-react`.
 - `profiles`: an object; each key is a profile's name and its value is the one line the owner reads when choosing. `general` is never a profile.
 
@@ -161,7 +165,12 @@ lifecycle: birth
 **Format.** Any files. Buddy treats a few of them specially:
 - **Placeholders.** `BuddyApp` (PascalCase, a valid C# name) and `buddy-app` (kebab-case) are replaced by the project's name, taken from its folder: a folder `acme-orders` gives `AcmeOrders` and `acme-orders`. They are replaced in file and folder names and in the contents of every text file.
 - **Pipelines.** `.github/workflows/` for GitHub Actions and `azure-pipelines.yml` at the root for Azure Pipelines. The owner says where the repository will live (`--host github`, `azure` or `none`), and the project keeps only that host's pipeline.
-- **Scripts.** In `package.json`: `setup` (optional) runs once when the project is born; `validate` runs the project's checks, at birth and before each change is presented; `scan` (optional) runs the project's own scanning rules once per change. A `validate.sh` at the root also counts as the validate command.
+- **Scripts (the four verification levels).** A template's `package.json` declares how the project is checked at each level:
+  1. **Pre-commit** (`gitleaks` in `.githooks/` or the project's pre-commit hook): blocks secrets before they enter git.
+  2. **Fast (`validate`)**: runs at birth, at each checkpoint, and backs change acceptance (`buddy move <change> accepted --by owner`). A `validate.sh` at the root also counts as the fast validate command.
+  3. **Full (`validate:full`, optional)**: the whole test suite (including slow integration tests). Runs via `buddy suite` and is required to close a milestone (`buddy move <milestone> accepted --by owner`) and to publish; Buddy refuses either without a green full run on the current code (valid for 2 days with the same tools). When `validate:full` is absent, `buddy suite` and milestone acceptance fall back to `validate`.
+  4. **Deep (`validate:deep`, optional)**: heavy checks run on demand via `buddy suite --deep` (end-to-end, mutation, load or security suites); Buddy refuses cleanly when `validate:deep` is not declared.
+  `setup` (optional) runs once when the project is born; `scan` (optional) runs the project's own scanning rules once per change.
 - **`CLAUDE.md`** (optional): kept, with Buddy's own block put first.
 - **`docs/decisions/`** (optional): decision records the application already took. They are copied like any file, so the project is born with them. They use the format of `buddy decide` (an id such as `D-2026-01-15-a1b2` and a MADR 4 body); the simplest way to write one is with `buddy decide` in a scratch project.
 - **`docs/steps/<step>.decided.md`**: the prefill of a step, described with the steps below.
@@ -183,7 +192,8 @@ lifecycle: birth
   "private": true,
   "type": "module",
   "scripts": {
-    "validate": "node --test"
+    "validate": "node --test",
+    "validate:full": "node --test"
   }
 }
 ```
@@ -216,8 +226,8 @@ jobs:
 
 **Format.** A front matter with a `questions` list. Each question has:
 - `id`: the key of its answer, such as `Q-LANG`. Keep it unique in the library.
-- `text`: the question as the owner hears it.
-- `why`: why it is asked, citing the clause of a standard or the decision that needs the answer.
+- `text`: the question as the owner hears it. Write it in the Product Owner's language: describe a situation the owner knows (who uses the app and from where, who gives or removes access, what happens if data is lost) and offer the choices; leave the technical consequence and the clause to `why`.
+- `why`: why it is asked, stating the technical consequence and citing the clause of a standard or the decision that needs the answer.
 - `choices` (optional): the answers to offer. The owner may still answer otherwise.
 - `section`: where the answer goes in the project's business context: `Purpose and outcomes`, `Users`, `Constraints`, `Risk appetite` or `Unknowns`. Always one of these English names, whatever language the project's documentation is kept in.
 - `fills` (optional): the name of the open value the answer fills in the standards.
@@ -385,7 +395,7 @@ The text after the front matter is the prompt itself.
 
 **When Buddy reads them.** `--questions --profile <profile>` lists the profile's prompts with their descriptions. At birth he reads them before writing anything. After birth no program detects the moment: Buddy offers the prompt to the owner when the work reaches what its description names, and runs it when the owner agrees.
 
-**What he copies into the project.** Each prompt of the profile, folder and all, to `.claude/skills/<name>/`. One that is already there is kept.
+**What he copies into the project.** Each prompt of the profile, folder and all, to `.agents/skills/<name>/`, and a thin `SKILL.md` with the same front matter to `.claude/skills/<name>/` for Claude Code. One that is already there is kept.
 
 **What he refuses.** No front matter. A `name` that is not its folder's name: "the library's prompts/<name>/SKILL.md has the name "x"; a saved prompt's name is the name of its folder, <name>". No `description`. No `profiles`.
 
@@ -403,6 +413,36 @@ profiles: [node-api]
 List the changes delivered since the last release, each with its acceptance criteria and the evidence of its checks. Do not judge them: the reviewer does.
 ```
 
+## The themes and the design rules
+
+**What they are.** What the screens of a project must look like. The **design rules** say how a screen must behave and read (contrast, keyboard, forms, target size, states); the **themes** are colour sets the owner chooses from. Both are read by discovery when the wireframes and the prototype are drawn, by Dev when he builds, by the reviewer and by the usability audit.
+
+**Design rules: where they live.** A `design.md` file among the standards: `standards/general/design.md` for every project, and `standards/<profile>/design.md` for one profile. It has no format of its own: it is a standards file like any other, with its front matter and its table of rules, each with its zone, its check and the problem it prevents. Optional.
+
+**Themes: where they live.** `themes/<name>.css`, one file per theme, at the top of the library, for every profile. A library may optionally include its own sample HTML page under `themes/` (copied alongside the CSS files to `docs/design/themes/`); when it does not, discovery generates one with `buddy verify theme --sample`. Optional (contract 2).
+
+**Format of a theme.** shadcn/ui's CSS variables: `:root { ... }` for light and `.dark { ... }` for dark (`--background`, `--foreground`, `--primary`, `--radius`, `--sidebar-*` — which colour the navigation whether it is a left sidebar or a top bar — and the rest the template uses), with the theme's name and a one-line description in a comment at the top. Write the description for the owner: what it looks like, not how it is made. A theme's traits that are not colours (such as pill buttons, dark navigation, table header styling or a decorative stripe) go in the library's `design.md`, one row per theme. A theme may embed its fonts (for example as `@font-face` data URIs) when their licence allows it, and never fetches them from the network. Measure each theme with `buddy verify theme themes/<name>.css` before publishing it to check WCAG AA contrast in light and dark.
+
+**What Buddy does with them.** At birth he copies the themes (and any optional sample HTML page in `themes/`) to `docs/design/themes/` (one already there is kept) and names the CSS themes in `docs/standards/ORIGIN.md`; the design rules arrive with the standards. During discovery he shows the themes to the owner via the library's sample page or `buddy verify theme --sample`; an owner who brings a visual proposal of their own gets it turned into a theme of the same format, measured with `buddy verify theme`, and kept in the same folder. A template that wants the chosen theme to reach its screens reads it from one file of its own (the default library's `dotnet-react` uses `web/src/theme.css`), which Buddy replaces with the chosen theme. A library with neither: discovery drafts a short brand brief with the owner instead.
+
+**What he refuses.** Nothing: a theme is copied as it is; `.css` files are themes and `.html` files in `themes/` travel alongside them as sample pages. A library that brings themes declares contract `2`.
+
+**Example.**
+
+<!-- file: themes/harbour.css -->
+```css
+/* Harbour: navy and white, calm and formal, for internal screens. */
+:root { --background: oklch(1 0 0); --foreground: oklch(0.2 0.03 250); --primary: oklch(0.35 0.1 250); --primary-foreground: oklch(0.98 0 0); --radius: 0.5rem; }
+.dark { --background: oklch(0.18 0.03 250); --foreground: oklch(0.96 0 0); --primary: oklch(0.7 0.1 250); --primary-foreground: oklch(0.15 0 0); }
+```
+
+<!-- file: standards/general/design.md (one rule) -->
+```markdown
+| Id | Zone | Rule | Checked by | Prevents |
+| :-- | :-- | :-- | :-- | :-- |
+| DSN-1 | must | Contrast: text has at least 4.5:1 against its background, in light and in dark mode (WCAG 1.4.3). | reviewer, on the screen | text people cannot read |
+```
+
 ## What a project receives
 
 | From the library | In the project |
@@ -412,7 +452,8 @@ List the changes delivered since the last release, each with its acceptance crit
 | the answers to `questions/` | lines in `docs/context.md` |
 | `steps/<step>/` | `docs/steps/<step>/` and the step's record |
 | `normative/index.md` | `docs/standards/normative.md` |
-| `prompts/<name>/` | `.claude/skills/<name>/` |
+| `prompts/<name>/` | `.agents/skills/<name>/` (and a thin wrapper in `.claude/skills/<name>/`) |
+| `themes/<name>.css` | `docs/design/themes/<name>.css` |
 | the library, its version and the profile | the first decision record in `docs/decisions/` |
 
 Buddy commits all of it as the project's first commit, naming each file.

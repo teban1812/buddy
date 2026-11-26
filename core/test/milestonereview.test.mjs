@@ -25,7 +25,8 @@ test('how to try a criterion: two parts, one per criterion of the change, while 
   const d = repo(); const c = change(d, 'Save books'); building(d, c.id);
   const r = howtoSet(d, c.id, 'ac1', { steps: 'Open the list and press Add', expect: 'The book is in the list' }); assert.equal(r.criterion, 'AC1');
   howtoSet(d, c.id, 'AC1', { steps: 'Open the list, press Add and type a title', expect: 'The book is in the list' });          // setting it again replaces it
-  assert.deepEqual(readSlice(d, c.id).data.howto, [{ criterion: 'AC1', steps: 'Open the list, press Add and type a title', expect: 'The book is in the list' }]);
+  const [h, ...more] = readSlice(d, c.id).data.howto; assert.equal(more.length, 0); assert.match(h.at, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\dZ$/);   // when it was written (count-only-open-review-notes)
+  assert.deepEqual({ ...h, at: undefined }, { criterion: 'AC1', steps: 'Open the list, press Add and type a title', expect: 'The book is in the list', at: undefined });
   assert.throws(() => howtoSet(d, c.id, 'AC9', { steps: 'x', expect: 'y' }), /AC9 is not a criterion of .*; there are: AC1, AC2/);
   assert.throws(() => howtoSet(d, c.id, 'AC2', { steps: '', expect: 'y' }), /what to do \(--steps\) is missing/); assert.throws(() => howtoSet(d, c.id, 'AC2', { steps: 'a', expect: 'b\nc' }), /one paragraph/);
   assert.deepEqual(verify([path.join(d, 'docs/buddy')], { canonical: true }).problems ?? [], []);

@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // usage: index.mjs [--repo <dir>] [--force] [--json]
-// The index of the records (R138): every record read in one pass into .git/buddy/index.json, rebuilt only when a record changed.
+// The index of the records (R138): every record read in one pass into .buddy/index.json, rebuilt only when a record changed.
 // Prints one line with what it holds, or the index itself with --json.
 import { refreshIndex, indexText } from '../src/index.mjs';
 const a = process.argv.slice(2); const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) { const k = a[i].slice(2); o[k] = ['json', 'force'].includes(k) ? true : a[++i]; }

@@ -3,5 +3,4 @@
 import { runWithTimeout } from './proc.mjs';
 const { c, cwd, timeoutMs } = JSON.parse(process.argv[2]);
 const r = await runWithTimeout(c, { cwd, timeoutMs });
-process.stdout.write(JSON.stringify(r));
-process.exit(0);
+process.stdout.write(JSON.stringify(r), () => process.exit(0));

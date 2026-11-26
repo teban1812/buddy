@@ -1,0 +1,6 @@
+{
+  "name": "buddy-panel",
+  "version": "0.1.0",
+  "description": "Claude Code's panel beside the conversation: what waits for you, what Buddy is building, what comes next and the hito in progress",
+  "types": "./types/index.d.ts"
+}

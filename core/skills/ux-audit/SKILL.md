@@ -1,6 +1,6 @@
 ---
 name: ux-audit
-description: Usability and accessibility audit (WCAG 2.2 AA, ISO 9241-110), on demand - of the prototype before the owner confirms its manifest, of one change, or of the whole app - asking whether a real person can do their job with it, not whether it matches the prototype. Every finding names the criterion or principle it breaks and its cost to the user. Use when the owner or the developer asks for a "UX audit", a usability or accessibility review, to "revisar la usabilidad" or to check the prototype before confirming it. Never a stage of the cycle.
+description: Usability and accessibility audit (WCAG 2.2 AA, ISO 9241-110), on demand - of the prototype before the owner confirms its manifest, of one change, or of the whole app - asking whether a real person can do their job with it, not whether it matches the prototype. Every finding names the criterion or principle it breaks and its cost to the user. Use when the owner or the developer asks for a "UX audit", a usability or accessibility review, to "revisar la usabilidad" or to check the prototype before confirming it. A fixed step only on the prototype; on a change or the app, never a stage of the cycle.
 ---
 
 # Usability audit
@@ -39,8 +39,8 @@ Derive, never remember. Write the answers at the top of your notes:
 ## Modes
 If it is not clear which one is meant, ask.
 
-**The prototype, before the owner confirms its manifest.** The cheapest moment: a fix is one edit, and afterwards Dev builds what the prototype says, faithfully, defects included. Also worth running mid-project over the screens no change has built yet.
-1. Calibrate, and run `buddy prototype facts` for the screens and their links. Serve `docs/inputs/prototype/` over a local HTTP server (`file://` breaks scripts and relative paths) and open it in a **new** tab.
+**The prototype, before the owner confirms its manifest.** A fixed step: `discover` runs it before the test with users, `intake` before a handed-over manifest is confirmed. The cheapest moment: a fix is one edit, and afterwards Dev builds what the prototype says, faithfully, defects included.
+1. Calibrate, and run `buddy prototype facts` for the screens and their links. Serve `docs/` (the prototype links its theme there) over a local HTTP server (`file://` breaks scripts) and open `inputs/prototype/` in a **new** tab. The report goes to `docs/discovery/ux-audit.md`, never into `docs/inputs/`.
 2. Walk **every** screen: consistency across screens is most of the value here. Drive the prototype's own switches (a role, a theme, its sample data).
 3. Apply `references/heuristics.md` and `references/accessibility.md` as for the app: a 3:1 ratio is 3:1 in either.
 4. Say in the report what this mode cannot see (real data, roles, volume, errors, what the build will invent), and **split every finding by what its fix costs**: *free* when no change that covers the screen has been built, *costs built work* when one has, because changing the prototype then leaves the built screen departing from it, and realigning it is a new change for the owner to weigh.

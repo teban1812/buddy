@@ -8,7 +8,7 @@ import { fileURLToPath } from 'node:url';
 const CORE = path.join(path.dirname(fileURLToPath(import.meta.url)), '..');
 const ROOT = path.join(CORE, '..');
 const GUIDE = path.join(ROOT, 'docs', 'guide');
-const PAGES = ['README.md', 'overview.md', 'getting-started.md', 'working-alone.md', 'feedback.md', 'glossary.md', 'troubleshooting.md', 'commands.md'];
+const PAGES = ['README.md', 'overview.md', 'getting-started.md', 'discovery.md', 'working-alone.md', 'feedback.md', 'glossary.md', 'troubleshooting.md', 'commands.md'];
 const docs = [...PAGES.map(p => path.join(GUIDE, p)), path.join(ROOT, 'README.md')].filter(f => fs.existsSync(f));
 const read = f => fs.readFileSync(f, 'utf8');
 const rel = f => path.relative(ROOT, f).split(path.sep).join('/');

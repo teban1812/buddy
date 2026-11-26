@@ -65,13 +65,17 @@ export function blobsForRecord(repo, files, env, names, commits = []) {
   const clean = files.filter(f => (head[f] ?? null) === cur[f]);
   return { ...cur, ...(clean.length ? blobsAsOwned(repo, clean, names, commits) : {}) };
 }
-// Which tests a validate run covered (R148): today always the whole suite, `full`; a run scoped to a change would record its scope. A full
-// run covers any need, a scoped one only its own. Evidence of before R148 has no `tests`: every run then was full.
+// Which tests a validate run covered (R148, R200, R239): `fast` (validate at checkpoint and change acceptance), `full` (validate:full, or
+// validate when no validate:full exists, required for milestone acceptance and release), or `deep` (validate:deep on demand). A deeper level
+// covers every shallower one (`deep` covers `full` and `fast`; `full` covers `fast`); a scoped run covers only itself.
+// Evidence of before R148 has no `tests`: every run then was full.
+export const FAST_TESTS = 'fast';
 export const FULL_TESTS = 'full';
+export const DEEP_TESTS = 'deep';
 export const testsOf = e => e?.tests ?? FULL_TESTS;
-export const testsCover = (ran, need) => ran === FULL_TESTS || ran === need;
+export const testsCover = (ran, need) => ran === DEEP_TESTS || (ran === FULL_TESTS && need !== DEEP_TESTS) || ran === need;
 // A green validate any earlier check ran on the same code (R148), whatever its slice, or none: among `files` (the evidence files the index
-// lists: every change folder and .git/buddy), the latest by time whose code fingerprint is `code`, whose validate passed and whose tests
+// lists: every change folder and .buddy), the latest by time whose code fingerprint is `code`, whose validate passed and whose tests
 // cover `need`. Only validate is shared: the reviewer's verdict and the diff scan judge each slice on its own. Returns { file, e } (`file`
 // relative to the repository), or null.
 // Each candidate is read from its summary when it has one; only the one chosen is read whole.
@@ -90,10 +94,10 @@ export function reuseRefusal(e, { now = new Date(), environment = currentEnviron
 }
 // What defines the goal of a change, for deciding whether the reviewer's verdict still stands: its criteria, what it leaves out, the assumptions announced and how each criterion is tried.
 export const goalHashOf = data => crypto.createHash('sha256').update(JSON.stringify({ c: data?.criteria || [], x: data?.excludes || [], a: (data?.assumptions || []).map(a => [a.id, a.text, a.if_otherwise]), h: data?.howto || [] })).digest('hex').slice(0, 16);
-// Has the whole suite passed on the code as it is now? (acceptance asks it, R173) It is the same search as sharing a result between changes: a full run, green,
-// on exactly this code, under 2 days old and got with the same tools. { ok, from } or { ok: false, why }.
-export function suiteGreen(repo, files, { now = new Date(), environment = currentEnvironment() } = {}) {
-  const refusals = []; const r = sharedValidate(repo, files, codeHash(repo), FULL_TESTS, { now, environment, refusals });
+// Has the required test level passed on the code as it is now? (acceptance asks it, R173, R200, R239) It is the same search as sharing a result
+// between changes: a green run covering `need` (default `full`), on exactly this code, under 2 days old and got with the same tools. { ok, from } or { ok: false, why }.
+export function suiteGreen(repo, files, { need = FULL_TESTS, now = new Date(), environment = currentEnvironment() } = {}) {
+  const refusals = []; const r = sharedValidate(repo, files, codeHash(repo), need, { now, environment, refusals });
   return r ? { ok: true, from: r.file, when: r.e.when ?? null, slice: r.e.slice ?? null } : { ok: false, why: refusals[0] ?? 'it has not run on this code' };
 }
 export function sharedValidate(repo, files, code, need = FULL_TESTS, { now = new Date(), environment = currentEnvironment(), refusals = [] } = {}) {
@@ -170,6 +174,21 @@ export function pieceExceptions(r, ev) {
   return [...(!ev ? ['no checkpoint evidence was kept for it'] : [...unrun, ...reasons, ...costly]), ...(r.departures ? [`${r.departures} departure${r.departures === 1 ? '' : 's'} from the prototype to decide`] : [])];
 }
 
+// The notes of a delivered piece that are still open (R250, RQ7): those of its latest checkpoint (the only one read), less what was settled after it:
+// the stop-and-hand-it-over line (the piece is delivered), a way to try that is written now, and a way to try the reviewer found wanting that was rewritten
+// after the checkpoint (the way keeps the time it was set, `at`; one set before that was kept, or with no time, stays open). `data` is the piece's record.
+export const WAYS_UNPROVEN = 'independent reviewer: a way to try a criterion would not prove it (';
+export function openNotes(ev, data) {
+  const ways = new Map((data?.howto || []).map(h => [h.criterion, h])); const when = Date.parse(ev?.when);
+  const settled = n => {
+    if (n.includes(ESCALATED)) return true;
+    const none = /^no way to try ([A-Z0-9, ]+) is written/.exec(n); if (none) return none[1].split(',').every(c => ways.has(c.trim()));
+    if (!n.startsWith(WAYS_UNPROVEN)) return false;
+    const ids = [...n.matchAll(/(?:\(|\| )(AC\d+):/g)].map(m => m[1]); return ids.length > 0 && ids.every(c => Date.parse(ways.get(c)?.at) > when);
+  };
+  return pieceExceptions({ departures: 0 }, ev).filter(n => !settled(n));
+}
+
 // What a checkpoint says apart, never a reason by itself (R155): the screens the reviewer could not compare with the prototype, and the tests
 // that failed and then passed on validate's one rerun, to fix. -> ['unstable test(s) to fix: <names>', 'not verified by the reviewer: <screen: why>']
 // A screen the reviewer could not verify: a line "screen: why", whether the reviewer wrote a line or an object { screen, why, how_to_verify }.
@@ -184,6 +203,8 @@ export const apartOf = ev => [...(unstableOf(ev) ? [`unstable test(s) to fix: ${
 // from the record by withReclassified, or kept by an evidence of before R140) holds the correction of the reviewer's mark, by number, and who made it (`buddy slice decision <id> <n> costly|cheap [--by owner]`): Buddy
 // raises one to costly; only the owner lowers one to cheap (R139), and such a one is `lowered`.
 export const COSTLY = 'costly decision nobody specified: ';
+// The words the checkpoint ends its reasons with when a third round still has findings: the work stops until the owner decides (R249).
+export const ESCALATED = 'hand the matter to the owner';
 export const costlyReason = x => `${COSTLY}${x.text}`;
 export const decisionsOf = review => (Array.isArray(review?.unspecified_decisions) ? review.unspecified_decisions : [])
   .map(d => (typeof d === 'string' ? { text: d, costly: false } : { text: String(d?.text ?? ''), costly: d?.costly === true })).filter(d => d.text.trim());

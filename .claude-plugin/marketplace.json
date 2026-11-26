@@ -6,6 +6,11 @@
       "name": "buddy",
       "source": "./core",
       "description": "The Product Owner's companion for AI-assisted software development."
+    },
+    {
+      "name": "buddy-panel",
+      "source": "./panel/claude",
+      "description": "Claude Code's panel beside the conversation: what waits for you, what Buddy is building and what comes next. Install once per machine; it needs Buddy."
     }
   ]
 }

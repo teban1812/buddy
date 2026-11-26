@@ -1,0 +1,7 @@
+{
+  "name": "buddy-panel",
+  "displayName": "Buddy panel",
+  "description": "A panel beside the conversation: what waits for you, what Buddy is building, what comes next and the milestone in progress.",
+  "version": "0.1.0",
+  "license": "MIT"
+}

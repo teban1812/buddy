@@ -11,6 +11,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { readContext, riskState, contextCard, confirmStatements, acceptAssumed, draftContext, intakePrompt, parseIntake, suppressionSources, addStatement, isStepRecord, approveRecord } from '../src/context.mjs';
 import { claudeAsk } from '../src/analysis.mjs';
+import { recordApproval } from '../src/proc.mjs';
 
 const argv = process.argv.slice(2); const cmd = argv.shift(); const pos = []; const o = { line: [] }; const flags = new Set(['require-risk-confirmed', 'json', 'all-risk', 'dry', 'assumed']);
 for (let i = 0; i < argv.length; i++) { if (argv[i].startsWith('--')) { const k = argv[i].slice(2); if (flags.has(k)) o[k] = true; else if (k === 'line') o.line.push(argv[++i]); else o[k] = argv[++i]; } else pos.push(argv[i]); }
@@ -32,16 +33,17 @@ try {
     if (file && isStepRecord(file) && o.by !== 'owner') throw new Error(`${file} is the record of a step: only the Product Owner confirms or corrects its lines (--by owner), and only after he said so in the conversation`);
     const corrections = {}; if (o.text) { if (o.line.length !== 1) throw new Error('--text needs exactly one --line'); corrections[o.line[0]] = o.text; }
     const r = confirmStatements(fs.readFileSync(file, 'utf8'), { lines: o.line, allRisk: !!o['all-risk'], corrections }); fs.writeFileSync(file, r.text); console.log(`confirmed line(s): ${r.changed.join(', ') || '(none changed)'}`);
+    if (r.changed.length) recordApproval(process.cwd(), [file], `confirmation of line(s) ${r.changed.join(', ')} of ${file}`);   // committed at once (R281)
   } else if (cmd === 'approve') {
     if (!file || !isStepRecord(file)) throw new Error(`${file || '(no file)'} is not the record of a step (named by record: in docs/steps/<step>/step.md); only a step's record is approved`);
-    fs.writeFileSync(file, approveRecord(fs.readFileSync(file, 'utf8'), { by: o.by })); console.log(`approved by the owner: ${file}; any later edit needs a new approval`);
+    fs.writeFileSync(file, approveRecord(fs.readFileSync(file, 'utf8'), { by: o.by })); console.log(`approved by the owner: ${file}; any later edit needs a new approval`); recordApproval(process.cwd(), [file], `approval of ${file}`);
   } else if (cmd === 'add') {
     const f = o.file || file || 'docs/context.md';
     if (!fs.existsSync(f)) throw new Error(`there is no ${f} here; create the project first with: buddy init`);
     const r = addStatement(fs.readFileSync(f, 'utf8'), { section: o.section, statement: o.text, assumed: !!o.assumed });
     if (!r.added) { console.log(`already in "${r.section}", nothing changed`); process.exit(0); }
     fs.writeFileSync(f, r.text); console.log(`added to "${r.section}" in ${f}:\n  ${r.line}`);
-  } else if (cmd === 'accept-assumed') { fs.writeFileSync(file, acceptAssumed(fs.readFileSync(file, 'utf8'))); console.log('recorded: the owner chose to go on with the risk appetite left assumed'); }
+  } else if (cmd === 'accept-assumed') { fs.writeFileSync(file, acceptAssumed(fs.readFileSync(file, 'utf8'))); console.log('recorded: the owner chose to go on with the risk appetite left assumed'); recordApproval(process.cwd(), [file], `choice to go on with the risk appetite of ${file} left assumed`); }
   else if (cmd === 'intake') {
     const out = o.out || 'docs/context.md'; const notes = fs.existsSync(o.notes || '') ? fs.readFileSync(o.notes, 'utf8') : (o.notes || '');
     if (!notes) throw new Error('--notes needs rough notes (text or a file)');

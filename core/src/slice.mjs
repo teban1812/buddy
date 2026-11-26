@@ -4,12 +4,12 @@
 import path from 'node:path';
 import { dumpDocument } from './yaml.mjs';
 
-const STEP = /^(\s*)- \[([ x])\] (\d+(?:\.\d+)*)\.?\s+(\S.*)$/;
+const STEP = /^(\s*)- \[([ x-])\] (\d+(?:\.\d+)*)\.?\s+(\S.*)$/;   // [-]: dropped, a decision voided it (R238)
 // What a record without steps says in their place (R87: a record with no steps and no word about them confused the Product Owner).
 export const NO_STEPS = { change: 'Steps: planned when the change is ready.', slice: 'Steps: planned when the slice is ready.', split: 'Steps: in the slices of this change.' };
 const PLACEHOLDER = new Set(Object.values(NO_STEPS));
 
-// Reads the "## Steps" section. Returns { steps: [{ line, depth, num, done, text }], errors: [{ where, message }], present }.
+// Reads the "## Steps" section. Returns { steps: [{ line, depth, num, done, dropped, text }] (a dropped step counts as done: nothing is left to do in it), errors: [{ where, message }], present }.
 export function parseSteps(body) {
   const lines = body.replace(/\r\n/g, '\n').split('\n');
   const start = lines.findIndex(l => /^##\s+Steps\s*$/.test(l));
@@ -23,7 +23,7 @@ export function parseSteps(body) {
     if (!m) { errors.push({ where: `Steps, line ${i - start}`, message: `not a step ("- [ ] 1. text" or "  - [ ] 1.1 text"): "${l.trim().slice(0, 50)}"` }); continue; }
     const depth = m[3].split('.').length;
     if (m[1].length !== (depth - 1) * 2) errors.push({ where: `Steps ${m[3]}`, message: `indentation must be ${(depth - 1) * 2} spaces for a step numbered ${m[3]}` });
-    steps.push({ line: i - start, depth, num: m[3], done: m[2] === 'x', text: m[4] });
+    steps.push({ line: i - start, depth, num: m[3], done: m[2] !== ' ', ...(m[2] === '-' ? { dropped: true } : {}), text: m[4] });
   }
   // numbering: 1,2,3 at the top; n.1, n.2 under n; no gaps, no repeats
   const next = new Map(); const seen = new Set();
@@ -40,7 +40,7 @@ export function parseSteps(body) {
 }
 
 // Canonical form (R5, Q37): the file equals what the program would write. Key order is fixed; the body is kept as it is.
-export const KEY_ORDER = ['schema', 'id', 'title', 'kind', 'status', 'rank', 'epic', 'depends_on', 'branch', 'base', 'created', 'updated', 'accepted', 'request', 'batches', 'decisions', 'findings', 'criteria', 'excludes', 'assumptions', 'screens', 'divergences', 'howto', 'unverified', 'reclassified', 'outcome'];
+export const KEY_ORDER = ['schema', 'id', 'title', 'kind', 'status', 'rank', 'depends_on', 'branch', 'base', 'created', 'updated', 'accepted', 'request', 'request_history', 'batches', 'decisions', 'findings', 'criteria', 'excludes', 'assumptions', 'screens', 'divergences', 'howto', 'unverified', 'reclassified', 'outcome'];
 export const orderKeys = data => Object.fromEntries([...KEY_ORDER.filter(k => k in data), ...Object.keys(data).filter(k => !KEY_ORDER.includes(k))].map(k => [k, data[k]]));
 export const canonicalText = (data, body) => dumpDocument(orderKeys(data), body.endsWith('\n') ? body : body + '\n');
 export const isCanonical = (text, data, body) => text.replace(/\r\n/g, '\n') === canonicalText(data, body.replace(/\r\n/g, '\n'));
@@ -73,7 +73,19 @@ export function setStep(body, num, done) {
   if (done && steps.some(x => x.num.startsWith(num + '.') && !x.done)) throw new Error(`step ${num} has open sub-steps`);
   const start = lines.findIndex(l => /^##\s+Steps\s*$/.test(l));
   const i = start + s.line; if (!STEP.test(lines[i])) throw new Error('could not locate the step line');
+  if (s.dropped) throw new Error(`step ${num} was dropped: it is neither ticked nor reopened`);
   lines[i] = lines[i].replace(/\[( |x)\]/, done ? '[x]' : '[ ]');
+  return lines.join('\n');
+}
+// Drops a step a decision voided (R238): it stays in the record, marked [-] with its reason, and no longer counts as open.
+export function dropStep(body, num, why) {
+  const { lines } = sections(body); const { steps } = parseSteps(body);
+  const s = steps.find(x => x.num === num); if (!s) throw new Error(`no step ${num}`);
+  if (s.done) throw new Error(`step ${num} is ${s.dropped ? 'already dropped' : 'done'}`);
+  if (steps.some(x => x.num.startsWith(num + '.') && !x.done)) throw new Error(`step ${num} has open sub-steps`);
+  if (!String(why || '').trim()) throw new Error('say why it is dropped (--why "<the decision that voided it>")');
+  const start = lines.findIndex(l => /^##\s+Steps\s*$/.test(l)); const i = start + s.line;
+  lines[i] = lines[i].replace('[ ]', '[-]') + ` (dropped: ${String(why).trim().replace(/\s+/g, ' ')})`;
   return lines.join('\n');
 }
 
@@ -107,9 +119,8 @@ export const NEXT = {
 export function checkSlice(docs, ctx, add) {
   const byId = new Map(docs.map(d => [d.data.id, d]));
   for (const d of docs) {
-    const s = d.data; const f = d.file; const parts = docs.filter(x => (x.change ?? x.data.epic) === s.id);
+    const s = d.data; const f = d.file; const parts = docs.filter(x => x.change === s.id);
     // identity: a change is the change.md of a folder named <date>-<name>; its slices are the other records of the folder (R87).
-    // `epic:` is the flat layout of before R87, read until `buddy migrate` moves it into folders.
     // A milestone is the milestone.md of docs/buddy/milestones/<date>-<name>/, and its changes are in changes/ of that folder (R118).
     const milestone = s.kind === 'milestone';
     if (path.basename(f) === 'milestone.md') {
@@ -117,7 +128,6 @@ export function checkSlice(docs, ctx, add) {
       if (!milestone) add(f, 'kind', 'milestone.md is the record of a milestone: its kind is milestone');
       if (path.basename(path.dirname(f)) !== want) add(f, 'id', `a milestone lives in a folder named by its date and its name: ${want}`);
       else if (path.basename(path.dirname(path.dirname(f))) !== 'milestones') add(f, 'id', 'a milestone lives in docs/buddy/milestones/');
-      if (s.epic) add(f, 'epic', 'a milestone has no epic');
       if (parseSteps(d.body).steps.length) add(f, 'Steps', 'a milestone has no steps: its work is in its changes');
       const mine = docs.filter(x => x.milestone === s.id && !x.change && path.basename(x.file) === 'change.md');
       const open = mine.filter(x => !['accepted', 'abandoned'].includes(x.data.status));
@@ -126,19 +136,11 @@ export function checkSlice(docs, ctx, add) {
     if (path.basename(f) === 'change.md') {
       const want = `${String(s.created).slice(0, 10)}-${s.id}`;
       if (path.basename(path.dirname(f)) !== want) add(f, 'id', `a change lives in a folder named by its date and its name: ${want}`);
-      if (s.epic) add(f, 'epic', 'a change has no epic: it is the parent of its slices');
       if (d.milestoneFolder && !d.milestone) add(f, 'id', 'this change is in the changes/ folder of a milestone that has no milestone.md');
       else if (!['backlog', 'changes'].includes(path.basename(path.dirname(path.dirname(f))))) add(f, 'id', 'a change lives in docs/buddy/backlog/ or in the changes/ folder of a milestone');
     } else if (d.folder && !milestone) {
       if (path.basename(f) !== `${s.id}.md`) add(f, 'id', `a slice of a change is the file ${s.id}.md`);
-      if (s.epic) add(f, 'epic', `a slice of a change has no epic: its change is its folder (${d.change})`);
     }
-    if (s.epic && !d.folder) {
-      if (s.epic === s.id) add(f, 'epic', 'a slice cannot be its own epic');
-      else if (!ctx.sliceIds.has(s.epic)) add(f, 'epic', `unknown slice ${s.epic}`);
-      else if (byId.has(s.epic) && byId.get(s.epic).data.kind !== 'epic') add(f, 'epic', `${s.epic} is not of kind epic`);
-    }
-    if (s.kind === 'epic' && s.epic) add(f, 'epic', 'an epic cannot have an epic (one level only)');
     const seenDep = new Set();
     for (const dep of s.depends_on || []) {
       if (dep === s.id) add(f, 'depends_on', 'a slice cannot depend on itself');

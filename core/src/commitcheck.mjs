@@ -50,7 +50,7 @@ export function checkCommitMessage(raw, { cwd = process.cwd(), requireExisting =
     const t = last(trailers, 'Slice');
     if (!t) warnings.push('a feat commit names its slice: add a trailer "Slice: <slice name>" (a new behaviour is a slice; if this is a correction use fix:)');
     else if (!SLICE_ID.test(t.value)) warnings.push(`"Slice: ${t.value}" is not a slice name (lowercase letters, digits and single hyphens)`);
-    else if (requireExisting && ['docs/buddy/backlog', 'docs/buddy/milestones', 'docs/buddy/changes', 'docs/buddy/slices'].some(d => fs.existsSync(path.join(cwd, d)))) {
+    else if (requireExisting && ['docs/buddy/backlog', 'docs/buddy/milestones'].some(d => fs.existsSync(path.join(cwd, d)))) {
       const found = findSlice(cwd, t.value);
       if (!found) warnings.push(`slice ${t.value} has no record under docs/buddy/ (buddy start creates it)`);
       else if (found === 'abandoned') warnings.push(`slice ${t.value} is abandoned`);

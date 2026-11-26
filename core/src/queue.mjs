@@ -5,6 +5,7 @@ import path from 'node:path';
 import { parseDocument } from './frontmatter.mjs';
 import { dumpDocument } from './yaml.mjs';
 import { newId, named } from './ids.mjs';
+import { refreshBoardPage } from './board.mjs';
 
 // A question named in a refusal goes with its situation, its id beside it (R78).
 const qn = q => named(q.situation, q.id);
@@ -66,7 +67,13 @@ export function renderBatchFile(batch) {
   return dumpDocument(batch, body);
 }
 
-export function writeBatchFile(file, batch) { fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, renderBatchFile(batch)); }
+export function writeBatchFile(file, batch) {
+  fs.mkdirSync(path.dirname(file), { recursive: true }); fs.writeFileSync(file, renderBatchFile(batch));
+  for (let d = path.resolve(path.dirname(file)); ; d = path.dirname(d)) {   // the open board waits on the questions too (live-board): the repository is the nearest folder up that holds the page
+    if (fs.existsSync(path.join(d, '.buddy', 'board.html'))) { refreshBoardPage(d); break; }
+    if (d === path.dirname(d)) break;
+  }
+}
 
 function settle(batch) {
   const open = batch.questions.some(q => q.status === 'open');

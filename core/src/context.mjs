@@ -71,11 +71,6 @@ export const stepWaitingText = r => (r.missing ? `the record ${r.record} of the 
   : r.approval === 'stale' ? `${r.record}, the record of the step ${r.step}, changed after you approved it (${r.approvedAt}): ${approveHint(r).replace('then read', 'read')} again`
   : `${r.record}, the record of the step ${r.step}, waits for your approval: ${approveHint(r).replace('then read', 'read')}`);
 
-// The risk-appetite statements as scope sources. Lines that say "high cost: ..." are what justifies unrequested protection.
-export function riskSources(ctx) {
-  return riskLines(ctx.statements, ctx.data).map((s, i) => ({ id: `R${i + 1}`, text: s.text, origin: s.origin }));
-}
-
 // ---------------------------------------------------------------------------------------------------------------------
 // Risk-appetite gate and context intake (task 3). Design: docs/design/04-interaction-spec.md section 3.1, R11; 03-schemas-v0.md.
 
@@ -87,7 +82,12 @@ const todayStr = () => new Date().toISOString().slice(0, 10);
 // The agent can never move a line to 'human'.
 export function riskState(ctx) {
   const lines = riskLines(ctx.statements, ctx.data); const named = ctx.data?.risk_section;
-  if (!lines.length) return { state: 'missing', lines, unconfirmed: [], named: !!named, message: named ? `the context names "${named}" as its risk section (risk_section in its header), and it has no section with that heading or the section has no line` : 'the context has no "Risk appetite" section' };
+  if (!lines.length) {
+    const has = ctx.body != null && contextSections(ctx.body).some(h => named ? h.toLowerCase() === String(named).trim().toLowerCase() : RISK_SECTION.test(h));
+    const message = named ? `the context names "${named}" as its risk section (risk_section in its header), and ${has ? 'the section has no line yet' : 'it has no section with that heading'}`
+      : has ? 'the "Risk appetite" section has no line yet' : 'the context has no "Risk appetite" section';
+    return { state: 'missing', lines, unconfirmed: [], named: !!named, message };
+  }
   const unconfirmed = lines.filter(s => s.origin !== 'human');
   if (!unconfirmed.length) return { state: 'confirmed', lines, unconfirmed, message: 'every risk-appetite line is confirmed by the owner' };
   if (ctx.data.risk_assumed_accepted) return { state: 'accepted-assumed', lines, unconfirmed, message: `${unconfirmed.length} risk-appetite line(s) left assumed on purpose (owner, ${ctx.data.risk_assumed_accepted}); protections beyond the request must be asked, not added` };
@@ -119,17 +119,20 @@ const bumpUpdated = (head, date) => /^updated:.*$/m.test(head) ? head.replace(/^
 // Confirms statements by body line number (relative to the body, as contextStatements reports them) or all risk lines.
 // `corrections`: { [line]: 'new text' } replaces the text of a line the owner corrected. Returns the new file text and what changed.
 export function confirmStatements(text, { lines = [], allRisk = false, corrections = {}, date = todayStr() } = {}) {
-  const { head, body } = splitFile(text); const stmts = contextStatements(body); const changed = [];
+  const { head, body, offset } = splitFile(text); const stmts = contextStatements(body); const changed = [];
   const want = new Set(lines.map(Number)); if (allRisk) for (const s of riskLines(stmts, parseDocument(text).data)) want.add(s.line);
   for (const l of Object.keys(corrections)) want.add(Number(l));
+  for (const w of want) if (!stmts.some(s => s.line === w)) {
+    const at = stmts.find(x => x.line === w - offset);
+    throw new Error(`line ${w} is not a statement (lines are numbered without the header, as buddy context check shows them${at ? `; file line ${w} is statement line ${at.line}: "${at.text.slice(0, 60)}"` : ''})`);
+  }
   const out = body.split('\n').map((raw, i) => {
     const no = i + 1; if (!want.has(no)) return raw;
-    const s = stmts.find(x => x.line === no); if (!s) throw new Error(`line ${no} is not a statement`);
+    const s = stmts.find(x => x.line === no);
     if (['human', 'decided'].includes(s.origin) && !(no in corrections)) return raw;
     const bullet = /^(\s*[-*]\s+)/.exec(raw)[1]; changed.push(no);
     return `${bullet}${corrections[no] ?? s.text} \`human ${date}\``;
   });
-  for (const w of want) if (!stmts.some(s => s.line === w)) throw new Error(`line ${w} is not a statement`);
   return { text: bumpUpdated(head, date) + out.join('\n'), changed };
 }
 

@@ -2,6 +2,42 @@
 
 Versions of the Buddy plugin. Each version is a milestone in `docs/buddy/milestones/`; the details of every change are in its folder.
 
+## 0.5.0 (2026-11-26)
+
+Buddy helps you discover the product before anything is built, works in Antigravity as well as Claude Code, and shows the work live, beside the conversation and in the browser. Released with the default library v0.6.4.
+
+**Discovering the product**
+- With no PRD and no prototype, Buddy offers discovery as the first step of the same conversation, at birth or later. He first reads what you already have and says which stage it covers, what is weak and where to go on, so you never repeat anything; with a PRD, he says what it lacks before planning.
+- Stage 1: research where every finding names its source, interviews in the people's own words, and a brief you confirm line by line, with a glossary, rules with examples and what it takes for true. What you confirm becomes the business context and the map of requests.
+- Stage 2: the flows before any wireframe (who may do what, the errors, the states), the design directives, and the wireframes of the key screens until you agree. The agreed flows and rules become the criteria and examples of the first milestone's changes.
+- Stage 3: a prototype in your theme, a usability audit before anyone tries it, a test with one or two real users, and the approval of the person who owns the process; it then goes straight into the confirmation of its screens and the milestone's plan. The board shows the stage. Step by step in `docs/guide/discovery.md`.
+- A library can bring colour themes and design rules (a `design.md` among its standards, contract 2); you choose a theme, or bring your own visual proposal and Buddy turns it into one. The default library v0.6.4 brings nine themes, each at WCAG AA contrast in light and dark, Tailwind and shadcn/ui in its .NET + React template, a light/dark switch, fifteen design rules and three for prototypes, with an accessibility test.
+- The usability audit is a fixed step on every prototype, built in discovery or handed over, before its screens are confirmed.
+
+**Seeing the work**
+- The board's page refreshes itself in the browser while Buddy works: what waits for you in your words, now and next, what changed since you last looked, progress per milestone, the changes in four groups, two colours for the agent's work and yours, and, folded, how the process is going (time per stage, how often you were asked, the work mix of the last 14 days). In Spanish or English, on a phone or a wide screen.
+- A panel beside the conversation, in Claude Code (`buddy-panel`) and in Antigravity App, shows the same in short, with a button that names what you will do for each thing waiting for you; each is its own plugin, installed once per machine, and `buddy tools language es` switches it to Spanish. Outside Buddy's own repository each panel reads the board, and opens its full page, with the Buddy installed in its own tool, and uses the other tool's only when its own is not installed. The milestone's bar in each panel has the board page's groups, order and colours (done, your turn, in progress, to define) with the counts beside it, so it moves while changes are built and wait for you to try; in Claude Code's panel every cell is the same character, so the cells look one size on Windows too.
+- The digest shows the work mix and the routes used over the last 14 days, with no alarms.
+
+**Buddy in Antigravity**
+- One install serves the `agy` command line, Antigravity App and Antigravity IDE; a project works the same with Claude Code, Antigravity or both, and you can switch tool halfway and lose nothing.
+- Dev and the independent reviewer work in the tool you talk to Buddy in; each role asks for a level (economical, balanced, strong), turned into a model by a word in your machine's setting (`buddy tools`), and a retired model never stops the work.
+- Buddy's local files live in `.buddy/` at the project root, ignored by git.
+
+**Working with Buddy**
+- Before a change or a milestone starts, Buddy says where each criterion's data comes from; one with no source is asked at the start.
+- Review rounds are counted per piece, and the summary to accept counts only the review notes still open.
+- The milestone review is a skill of its own: Buddy compares each built screen with the prototype using the browser at hand and has defects fixed before you see them.
+- You can reword a milestone's goal (`buddy milestone goal`), reorder changes (`buddy slice rank`), and Buddy can drop a step a decision voided, with its reason.
+- Tests run in levels: the fast checks back each change's acceptance, the whole suite (`buddy suite`) is needed to close a milestone and publish, and deep checks run on demand.
+- An acceptance you give in the conversation is recorded as given in chat; a library's questions are written in the Product Owner's words.
+- Every approval or answer you give (a go-ahead, an acceptance, a confirmation, a decision, an answer to a question) is committed at once, alone, apart from the work in progress; the go-ahead for a milestone takes its whole plan with it. When it cannot be, Buddy says which files wait.
+
+**Removed**
+- `buddy scope`, `buddy migrate`, `buddy prototype read` and `scan` (the prototype is read by Buddy, checked against its HTML), `buddy verify --madr`, and the reading of the old flat layout (`docs/buddy/slices/`, `epic:`, `S-` ids).
+
+The details are in `docs/requirements-log.md` (R221 to R284).
+
 ## 0.4.0 (2026-11-22)
 
 A library can shape how a project is born and what it brings along, and Buddy is published from a public repository. Released with the default library v0.5.0.

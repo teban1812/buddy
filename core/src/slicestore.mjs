@@ -3,9 +3,7 @@
 // Layout (R87, R118): a change is <YYYY-MM-DD>-<name>/change.md; when it has more than one piece, each slice is <slice name>.md in the same
 // folder, which also holds its question batches and checkpoint evidence (its decisions are in docs/decisions). A change lives in three places: in the
 // changes/ folder of a milestone (docs/buddy/milestones/<YYYY-MM-DD>-<name>/, whose milestone.md is the milestone's record, kind milestone),
-// in the backlog (docs/buddy/backlog/) when it belongs to no milestone, or in docs/buddy/changes/, the backlog of before R118, read as the
-// backlog until `buddy migrate` moves it. The flat layout of before R87 (docs/buddy/slices/<id>.md, children naming their parent in `epic:`)
-// is still read and written in place until `buddy migrate` runs.
+// in the backlog (docs/buddy/backlog/) when it belongs to no milestone.
 import fs from 'node:fs';
 import path from 'node:path';
 import { parseDocument } from './frontmatter.mjs';
@@ -17,30 +15,29 @@ import { SLICE_ID, SLICE_NAME, NAME_RULE, nameFromTitle } from './ids.mjs';
 const sn = s => `${s.data.title} [${s.data.id}]`;
 import { unconfirmedDefaults, unconfirmedIn } from './queue.mjs';
 import { readIndex, inputs as recordInputs } from './index.mjs';
-import { git, validateCommand } from './proc.mjs';
-import { addStep, setStep, canonicalText, NEXT, NO_STEPS, parseSteps, missingForReady, MAX_ASSUMPTIONS } from './slice.mjs';
+import { git, validateCommand, hasNpmScript } from './proc.mjs';
+import { addStep, setStep, dropStep, canonicalText, NEXT, NO_STEPS, parseSteps, missingForReady, MAX_ASSUMPTIONS } from './slice.mjs';
+import { refreshBoardPage } from './board.mjs';
 import { MANIFEST, readManifest } from './prototype.mjs';
-import { suiteGreen, latestEvidence, latestEvidenceFile, withReclassified, reviewFileOf, pieceExceptions, exceptionsText, blobsAsOwned, blobOfEvidence, unspecifiedOf, apartOf } from './evidence.mjs';
+import { suiteGreen, FAST_TESTS, FULL_TESTS, latestEvidence, latestEvidenceFile, withReclassified, reviewFileOf, openNotes, exceptionsText, blobsAsOwned, blobOfEvidence, unspecifiedOf, apartOf } from './evidence.mjs';
 import { vagueWarnings } from './vague.mjs';
 import { stepRecords, stepWaitingText } from './context.mjs';
 
 const schema = JSON.parse(fs.readFileSync(new URL('../schemas/slice.schema.json', import.meta.url), 'utf8'));
 export const BACKLOG = 'docs/buddy/backlog';                 // the changes of no milestone (R118)
 export const MILESTONES = 'docs/buddy/milestones';           // one folder per milestone, its changes in changes/ (R118)
-export const CHANGES = 'docs/buddy/changes';                 // the backlog of before R118, read as the backlog until `buddy migrate`
-export const SLICES = 'docs/buddy/slices';                    // the flat layout of before R87
 export const RECORDS = 'docs/buddy';
 const DATED = /^\d{4}-\d{2}-\d{2}-/;
 const stamp = now => now().toISOString().slice(0, 19) + 'Z';
-const parse = (file, change, folder) => { const d = parseDocument(fs.readFileSync(file, 'utf8')); if (d.error) throw new Error(`${file}: ${d.error}`); return { file, data: d.data, body: d.body, change: change ?? d.data.epic ?? null, folder, milestone: null }; };
+const parse = (file, change, folder) => { const d = parseDocument(fs.readFileSync(file, 'utf8')); if (d.error) throw new Error(`${file}: ${d.error}`); return { file, data: d.data, body: d.body, change: change ?? null, folder, milestone: null }; };
 const datedDirs = dir => fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).filter(e => e.isDirectory() && DATED.test(e.name)).map(e => e.name).sort().map(n => path.join(dir, n)) : [];
 export const isMilestone = s => s.data.kind === 'milestone';
 
-// The folders that hold changes: the backlog, the backlog of before R118, and the changes/ folder of each milestone ({ dir, milestone }).
+// The folders that hold changes: the backlog and the changes/ folder of each milestone ({ dir, milestone }).
 function changeHomes(repo) {
   const ms = datedDirs(path.join(repo, MILESTONES)).filter(d => fs.existsSync(path.join(d, 'milestone.md')))
     .map(d => ({ dir: path.join(d, 'changes'), milestone: parseDocument(fs.readFileSync(path.join(d, 'milestone.md'), 'utf8')).data?.id ?? null }));
-  return [{ dir: path.join(repo, BACKLOG), milestone: null }, { dir: path.join(repo, CHANGES), milestone: null }, ...ms];
+  return [{ dir: path.join(repo, BACKLOG), milestone: null }, ...ms];
 }
 // Every change folder, wherever it lives (for the readers that look into the folders, such as the digest's checkpoint evidence).
 export const changeDirs = repo => changeHomes(repo).flatMap(h => datedDirs(h.dir));
@@ -48,7 +45,7 @@ export const changeDirs = repo => changeHomes(repo).flatMap(h => datedDirs(h.dir
 // Every milestone, change and slice record: { file, data, body, change, folder, milestone } (`change`: the change a slice belongs to, null
 // for a change or a milestone; `milestone`: the milestone a change or its slice belongs to, null in the backlog).
 function records(repo) {
-  const out = []; const ldir = path.join(repo, SLICES);
+  const out = [];
   for (const dir of datedDirs(path.join(repo, MILESTONES))) {
     if (!fs.existsSync(path.join(dir, 'milestone.md'))) continue;
     const m = parse(path.join(dir, 'milestone.md'), null, true); if (m.data.schema !== 'buddy/slice@1') continue; m.change = null; out.push(m);
@@ -63,9 +60,6 @@ function records(repo) {
       const s = parse(path.join(dir, f), change.data.id, true); if (s.data.schema === 'buddy/slice@1') { s.milestone = home.milestone; out.push(s); }
     }
   }
-  if (fs.existsSync(ldir)) for (const f of fs.readdirSync(ldir).filter(f => f.endsWith('.md') && SLICE_ID.test(f.slice(0, -3))).sort()) {
-    const s = parse(path.join(ldir, f), null, false); if (s.data.schema === 'buddy/slice@1') out.push(s);
-  }
   return out;
 }
 // An id is a milestone, change or slice name; names are unique across the repository (R87, R118).
@@ -79,10 +73,8 @@ const byRank = (a, b) => a.data.rank - b.data.rank || a.data.id.localeCompare(b.
 export const listSlices = repo => records(repo).filter(x => !isMilestone(x)).sort(byRank);
 export const listMilestones = repo => records(repo).filter(isMilestone).sort(byRank);
 export const changesOf = (repo, milestone) => records(repo).filter(x => !isMilestone(x) && !x.change && x.milestone === milestone);
-// The folder of the change a record belongs to (where its batches and evidence go), or null in the flat layout.
-export function changeDirOf(repo, id) {
-  const s = readSlice(repo, id); return s.folder ? path.dirname(s.file) : null;
-}
+// The folder of the change a record belongs to (where its batches and evidence go).
+export const changeDirOf = (repo, id) => path.dirname(readSlice(repo, id).file);
 export const partsOf = (repo, id) => records(repo).filter(x => x.change === id);
 
 // Writes every `{ file, text, was? }` (`was`: the file it replaces, which is removed), verifies the repository's docs, and restores every file
@@ -106,6 +98,7 @@ export function commitAll(repo, writes, { all = false } = {}) {
   }
   const buddy = path.resolve(repo, 'docs', 'buddy') + path.sep;      // a folder emptied by a move goes too
   for (const w of writes) if (w.was && w.was !== w.file) for (let d = path.resolve(path.dirname(w.was)); d.startsWith(buddy) && fs.existsSync(d) && !fs.readdirSync(d).length; d = path.dirname(d)) fs.rmdirSync(d);
+  refreshBoardPage(repo);   // every record is written here, whichever script ran: an existing .buddy/board.html follows it (live-board)
 }
 // A record named by its title with its id beside it (R78), or the id alone when no record has it.
 const snOf = (repo, id) => { const s = records(repo).find(x => x.data.id === id); return s ? sn(s) : id; };
@@ -135,10 +128,9 @@ function openMilestone(repo, name, doing) {
 }
 
 // Opens a change (its folder and change.md) in the backlog, or in a milestone with `milestone`, or with `inChange` adds a slice to an
-// existing change (R87, R118; replaces `epic`).
+// existing change (R87, R118).
 export function startSlice({ repo = process.cwd(), title, request, name, kind = 'feat', criteria = [], excludes = [], inChange, milestone, dependsOn = [], branch, now = () => new Date() } = {}) {
   if (!title) throw new Error('a slice needs a title'); if (!request) throw new Error('a slice needs the request in the Product Owner\'s words');
-  if (kind === 'epic') throw new Error('a change in several pieces is a change with slices: open the change, then add each slice with --in <change>');
   if (kind === 'milestone') throw new Error('a milestone is opened with buddy milestone start');
   if (inChange && milestone) throw new Error('a slice goes into the folder of its change, wherever the change is: give --in or --milestone, not both');
   const all = records(repo); const existing = all.filter(x => !isMilestone(x));
@@ -147,7 +139,7 @@ export function startSlice({ repo = process.cwd(), title, request, name, kind = 
   const id = freeName(name ?? proposal.name, taken, name !== undefined);
   const parent = inChange ? readSlice(repo, inChange) : null;
   if (parent && isMilestone(parent)) throw new Error(`${sn(parent)} is a milestone: open a change in it with --milestone ${inChange}`);
-  if (parent && (parent.change || !parent.folder)) throw new Error(`${sn(parent)} is not a change in its own folder${parent.folder ? ` (it is a slice of ${snOf(repo, parent.change)})` : ' (it is in the flat layout: run buddy migrate first)'}`);
+  if (parent && parent.change) throw new Error(`${sn(parent)} is not a change in its own folder (it is a slice of ${snOf(repo, parent.change)})`);
   if (parent && stepsOf(parent).length) throw new Error(`${sn(parent)} already has steps of its own; a change in slices keeps its steps in its slices`);
   const home = milestone ? path.join(path.dirname(openMilestone(repo, milestone, 'a change is opened').file), 'changes') : path.join(repo, BACKLOG);
   const data = {
@@ -187,16 +179,23 @@ export function startMilestone({ repo = process.cwd(), title, request, name, cri
   commitAll(repo, [{ file, text: canonicalText(data, `# ${title}\n\n${MILESTONE_BODY}\n`) }]);
   return { id, file, data, proposed: !!proposal, shortened: !!proposal?.shortened, vague: vagueWarnings(data.criteria) };
 }
+// The owner rewords a milestone's goal (R250), in any state: it changes the words he reads, not what the milestone promises. The earlier wording stays in `request_history` with the moment it stopped being the goal.
+export function rewordMilestoneGoal(repo, id, text, { by, now = () => new Date() } = {}) {
+  if (by !== 'owner') throw new Error('only the Product Owner rewords a milestone\'s goal (--by owner)');
+  const goal = String(text ?? '').trim(); if (!goal) throw new Error('the new goal is empty: give it in the Product Owner\'s words');
+  const s = readSlice(repo, id); if (!isMilestone(s)) throw new Error(`${sn(s)} is not a milestone: a change's request is fixed once it is ready`);
+  if (s.data.request === goal) throw new Error(`the goal of ${sn(s)} already says that`);
+  const r = rewrite(repo, id, ({ data, body }) => { data.request_history = [...(data.request_history || []), { text: data.request, until: stamp(now) }]; data.request = goal; return { data, body }; }, now);
+  return { ...r, request: goal };
+}
 export const MILESTONE_BODY = 'Its changes are in the folder changes/ next to this file.';
 
 // Moves a change, with everything in its folder, into a milestone or to the backlog (R118). The folder keeps its date and its name, and
-// references go by the name, so nothing else changes. Refused for a slice (it moves with its change), a milestone, a change in the flat
-// layout, and into a milestone that is accepted or abandoned.
+// references go by the name, so nothing else changes. Refused for a slice (it moves with its change), a milestone, and into a milestone that is accepted or abandoned.
 export function moveChangeTo(repo, id, where) {
   const s = readSlice(repo, id);
   if (isMilestone(s)) throw new Error(`${sn(s)} is a milestone: only changes move between milestones and the backlog`);
   if (s.change) throw new Error(`${sn(s)} is a slice of ${snOf(repo, s.change)}: a slice moves with its change (buddy move-to ${s.change} ${where})`);
-  if (!s.folder) throw new Error(`${sn(s)} is in the flat layout: run buddy migrate first`);
   if (!where) throw new Error('say where: the name of a milestone, or backlog');
   const target = where === 'backlog' ? null : openMilestone(repo, where, 'a change is moved').data.id;
   const dir = path.dirname(s.file);
@@ -210,27 +209,57 @@ export function moveChangeTo(repo, id, where) {
   return { id, from: s.milestone, to: target, dir: nd, files: writes.length };
 }
 
+// Places a change before or after another in the same container (a milestone's changes or the backlog), picking an integer rank between
+// the target's neighbours and re-spacing the container in steps of 1000 when adjacent ranks leave no integer gap.
+export function rankChange(repo, id, where, otherId, { now = () => new Date() } = {}) {
+  if (where !== 'before' && where !== 'after') throw new Error(`say before or after (got "${where ?? ''}")`);
+  const a = readSlice(repo, id); const b = readSlice(repo, otherId);
+  if (id === otherId) throw new Error(`${sn(a)} cannot be placed ${where} itself`);
+  for (const x of [a, b]) {
+    if (isMilestone(x)) throw new Error(`${sn(x)} is a milestone: only changes are ordered with slice rank`);
+    if (x.change) throw new Error(`${sn(x)} is a slice of ${snOf(repo, x.change)}: only changes are ordered with slice rank`);
+  }
+  if (a.milestone !== b.milestone) {
+    const loc = x => x.milestone ? `the milestone ${snOf(repo, x.milestone)}` : 'the backlog';
+    throw new Error(`${sn(a)} is in ${loc(a)} and ${sn(b)} is in ${loc(b)}: move it with buddy move-to ${id} ${b.milestone || 'backlog'} first`);
+  }
+  const rest = changesOf(repo, a.milestone).sort(byRank).filter(x => x.data.id !== id);
+  const pos = rest.findIndex(x => x.data.id === otherId) + (where === 'after' ? 1 : 0);
+  const lo = pos > 0 ? rest[pos - 1].data.rank : null;
+  const hi = pos < rest.length ? rest[pos].data.rank : null;
+  const rank = lo === null ? (hi > 1 ? Math.floor(hi / 2) : null) : hi === null ? lo + 1000 : hi - lo > 1 ? Math.floor((lo + hi) / 2) : null;
+  const ts = stamp(now);
+  if (rank !== null) {
+    commit(repo, a.file, canonicalText({ ...a.data, rank, updated: ts }, a.body));
+    return { id, where, other: otherId, rank, milestone: a.milestone, respaced: false };
+  }
+  const ordered = [...rest.slice(0, pos), a, ...rest.slice(pos)];
+  const writes = ordered.map((x, i) => ({ x, rank: (i + 1) * 1000 })).filter(({ x, rank: r }) => x.data.rank !== r)
+    .map(({ x, rank: r }) => ({ file: x.file, text: canonicalText({ ...x.data, rank: r, updated: ts }, x.body) }));
+  commitAll(repo, writes);
+  return { id, where, other: otherId, rank: (pos + 1) * 1000, milestone: a.milestone, respaced: true };
+}
+
 // Renames a change or a slice, and every record that names it follows (R86, R87): a change's folder keeps its date and takes the new name,
-// a slice's file takes it; `depends_on` (and the `epic:` of the flat layout) of the other records, `slice:` of question batches, decisions
+// a slice's file takes it; `depends_on` of the other records, `slice:` of question batches, decisions
 // and findings, a decision's `requested_by`, the `to` of the items of the map of what was asked, and a batch file named after the old id. Only while refining: from ready on commits cite the
-// name. `force` is for the one-time migration; the commits already made keep the old name.
-export function renameSlice(repo, from, to, { force = false, now = () => new Date() } = {}) {
+// name.
+export function renameSlice(repo, from, to, { now = () => new Date() } = {}) {
   const s = readSlice(repo, from); const all = records(repo);
-  if (s.data.status !== 'refining' && !force) throw new Error(`${sn(s)} is ${s.data.status}: a change or slice is renamed only while it is refining, because from ready on commits cite its name`);
+  if (s.data.status !== 'refining') throw new Error(`${sn(s)} is ${s.data.status}: a change or slice is renamed only while it is refining, because from ready on commits cite its name`);
   if (to === from) throw new Error(`${sn(s)} already has that name`);
   freeName(to, takenNames(all.filter(x => x.data.id !== from)), true);
   const plan = new Map(); const put = (was, file, text) => plan.set(was, { was, file, text });
   const target = f => plan.get(f)?.file ?? f; const current = f => plan.has(f) ? plan.get(f).text : fs.readFileSync(f);
-  if (s.folder && !s.change) {                                    // a change: its whole folder moves, evidence included
+  if (!s.change) {                                                // a change: its whole folder moves, evidence included
     const dir = path.dirname(s.file); const nd = path.join(path.dirname(dir), `${path.basename(dir).slice(0, 11)}${to}`);
     const walk = d => fs.readdirSync(d, { withFileTypes: true }).flatMap(e => e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)]);
     if (fs.existsSync(nd)) throw new Error(`${path.relative(repo, nd)} already exists`);
     for (const f of walk(dir)) put(f, path.join(nd, path.relative(dir, f)), fs.readFileSync(f));
   }
-  put(s.file, s.folder && !s.change ? target(s.file) : path.join(path.dirname(s.file), `${to}.md`), canonicalText({ ...s.data, id: to, updated: stamp(now) }, s.body));
-  for (const x of all) if (x.data.id !== from && (x.data.epic === from || (x.data.depends_on || []).includes(from))) {
-    const data = { ...x.data, ...(x.data.epic === from ? { epic: to } : {}), ...(x.data.depends_on ? { depends_on: x.data.depends_on.map(d => d === from ? to : d) } : {}) };
-    put(x.file, target(x.file), canonicalText(data, x.body));
+  put(s.file, !s.change ? target(s.file) : path.join(path.dirname(s.file), `${to}.md`), canonicalText({ ...s.data, id: to, updated: stamp(now) }, s.body));
+  for (const x of all) if (x.data.id !== from && (x.data.depends_on || []).includes(from)) {
+    put(x.file, target(x.file), canonicalText({ ...x.data, depends_on: x.data.depends_on.map(d => d === from ? to : d) }, x.body));
   }
   const field = new RegExp(`^((?:slice|requested_by):[ \\t]+)"?${from}"?[ \\t]*$`, 'gm');   // a name is letters, digits and hyphens: nothing to escape
   const toField = new RegExp(`^([ \\t]+(?:- )?to:[ \\t]+)"?${from}"?[ \\t]*$`, 'gm');   // the map of what was asked: an item covered or excluded by it
@@ -337,7 +366,6 @@ export function reclassifyDecision(repo, id, n, verdict, { by, now = () => new D
   if (!['costly', 'cheap'].includes(verdict)) throw new Error('a decision nobody specified is costly or cheap');
   if (by != null && by !== 'owner') throw new Error(`--by takes only owner (got ${by})`);
   if (verdict === 'cheap' && by !== 'owner') throw new Error('only the owner lowers a decision to cheap: Buddy may raise one to costly, never lower it (add --by owner when the owner decided it)');
-  if (!s.folder) throw new Error(`${sn(s)} is in the flat layout: run buddy migrate first`);
   const dir = path.join(path.dirname(s.file), 'evidence'); const latest = latestEvidenceFile(dir, id);
   if (!latest) throw new Error(`${sn(s)} has no checkpoint evidence yet: the decisions nobody specified come from its checkpoint`);
   const list = unspecifiedOf(withReclassified(latest.e, latest.file, s.data.reclassified));
@@ -409,7 +437,7 @@ export function howtoSet(repo, id, criterion, { steps, expect, now = () => new D
   if (![...BUILDING, 'delivered'].includes(s.data.status)) throw new Error(`${sn(s)} is ${s.data.status}: how to try a criterion is written while the slice is being built or once it is delivered (building, rework or delivered)`);   // Buddy also writes it for a delivered change that has none, before the review
   const c = String(criterion ?? '').toUpperCase(); if (!(s.data.criteria || []).some(x => x.id === c)) throw new Error(`${criterion || '(no criterion)'} is not a criterion of ${sn(s)}; there ${(s.data.criteria || []).length ? `are: ${s.data.criteria.map(x => x.id).join(', ')}` : 'is none'}`);
   const st = oneSentence(steps, 'what to do (--steps)'), ex = oneSentence(expect, 'what to see (--expect)');
-  const r = rewrite(repo, id, ({ data, body }) => { data.howto = [...(data.howto || []).filter(h => h.criterion !== c), { criterion: c, steps: st, expect: ex }].sort((a, b) => Number(a.criterion.slice(2)) - Number(b.criterion.slice(2))); return { data, body }; }, now);
+  const r = rewrite(repo, id, ({ data, body }) => { data.howto = [...(data.howto || []).filter(h => h.criterion !== c), { criterion: c, steps: st, expect: ex, at: stamp(now) }].sort((a, b) => Number(a.criterion.slice(2)) - Number(b.criterion.slice(2))); return { data, body }; }, now);
   return { ...r, criterion: c };
 }
 export function howtoRemove(repo, id, criterion, { now = () => new Date() } = {}) {
@@ -453,6 +481,11 @@ export const stepSetIn = (repo, id, num, done, { now = () => new Date() } = {}) 
   if (!['building', 'rework'].includes(st)) throw new Error(`steps are ticked while the slice is being built (building or rework); ${sn(s)} is ${st}`);
   return rewrite(repo, id, ({ data, body }) => ({ data, body: setStep(body, num, done) }), now);
 };
+export const stepDropIn = (repo, id, num, why, { now = () => new Date() } = {}) => {
+  const s = readSlice(repo, id); const st = s.data.status;
+  if (!['building', 'rework'].includes(st)) throw new Error(`steps are dropped while the slice is being built (building or rework); ${sn(s)} is ${st}`);
+  return rewrite(repo, id, ({ data, body }) => ({ data, body: dropStep(body, num, why) }), now);
+};
 
 // Moves a slice to another state. `by: 'owner'` is required to accept (the agent has no acceptance tool, Q47; the record is as strong as the repository, H4).
 // The first move to building records `base`, the commit the slice started from, where the checkpoint measures its changes from; a return to
@@ -489,6 +522,11 @@ export function moveSlice(repo, id, to, { by, channel = 'cli', now = () => new D
     const gone = new Set(mine.filter(x => x.data.status === 'abandoned').map(x => x.data.id));
     const lost = fs.existsSync(rq) ? (parseDocument(fs.readFileSync(rq, 'utf8')).data?.items || []).filter(x => x.priority === 'must' && x.destination === 'covered' && gone.has(x.to)) : [];
     if (lost.length) throw new Error(`${lost.length} Must of what you asked for lost ${lost.length === 1 ? 'its' : 'their'} destination in this milestone: ${lost.map(x => `${x.text} [${x.id}], covered by ${sn(mine.find(c => c.data.id === x.to))}, abandoned`).join(' | ')}. Give each a destination (buddy requests set <RQ id>) or change its priority`);
+    // Closing a milestone requires the whole test suite (`full` or `deep`) green on the current code (R200, R239).
+    if (validateCommand(repo)) {
+      const g = suiteGreen(repo, recordInputs(repo).evidence, { need: FULL_TESTS, now: now() });
+      if (!g.ok) throw new Error(`${sn(s)}: the whole test suite has not passed on the code as it is now (${g.why}): run it once with buddy suite, then accept the milestone again. One run serves every acceptance for 2 days with the same tools`);
+    }
   }
   if (to === 'accepted' && notDone.length) throw new Error(`${notDone.length} piece(s) of ${sn(s)} are not delivered yet: ${named(notDone)}. A change is accepted when every piece of it is delivered, accepted or abandoned`);
   const delivered = pieces.filter(x => x.data.status === 'delivered'); const whole = [s, ...delivered];   // what this acceptance covers
@@ -506,22 +544,22 @@ export function moveSlice(repo, id, to, { by, channel = 'cli', now = () => new D
     // (R144): another change's commits and uncommitted work on the same files never block it, the piece's own later commits do. Work
     // elsewhere in the repository, records and documents do not count. A file several pieces touched is compared with the latest evidence
     // that saw it. Evidence without that list never blocks.
-    if (s.folder) {
-      const cache = new Map(); const dir = path.join(path.dirname(s.file), 'evidence'); const seen = new Map();
-      const evs = whole.map(x => ({ x, e: latestEvidence(dir, x.data.id, cache) })).filter(o => o.e?.own_files).sort((a, b) => String(a.e.when).localeCompare(String(b.e.when)));
-      for (const o of evs) for (const [f, blob] of Object.entries(o.e.own_files)) seen.set(f, { ...o, blob: blobOfEvidence(blob) });
-      const blobsNow = {}; for (const o of evs) Object.assign(blobsNow, blobsAsOwned(repo, [...seen.keys()].filter(f => seen.get(f).e === o.e), [o.x.data.id], o.e.commits || []));
-      const changed = [...seen.keys()].filter(f => blobsNow[f] !== seen.get(f).blob).sort();
-      if (changed.length) {
-        const o = changed.map(f => seen.get(f)).sort((a, b) => String(b.e.when).localeCompare(String(a.e.when)))[0];
-        throw new Error(`${sn(s)}: the code changed after the last check (${o.e.when}${o.x !== s ? `, of ${sn(o.x)}` : ''}): run the checkpoint again. Changed: ${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}`);
-      }
-      // And the whole suite must be green on the code as it is now (R173): the slice's own files are as checked, but work elsewhere may have broken what was checked.
-      // One run is shared by every acceptance while it is under 2 days old and got with the same tools; a project with no suite has nothing to ask.
-      if (evs.length && validateCommand(repo)) {
-        const g = suiteGreen(repo, recordInputs(repo).evidence, { now: now() });
-        if (!g.ok) throw new Error(`${sn(s)}: the whole test suite has not passed on the code as it is now (${g.why}): run it once with buddy suite, then accept again. One run serves every acceptance for 2 days with the same tools`);
-      }
+    const cache = new Map(); const dir = path.join(path.dirname(s.file), 'evidence'); const seen = new Map();
+    const evs = whole.map(x => ({ x, e: latestEvidence(dir, x.data.id, cache) })).filter(o => o.e?.own_files).sort((a, b) => String(a.e.when).localeCompare(String(b.e.when)));
+    for (const o of evs) for (const [f, blob] of Object.entries(o.e.own_files)) seen.set(f, { ...o, blob: blobOfEvidence(blob) });
+    const blobsNow = {}; for (const o of evs) Object.assign(blobsNow, blobsAsOwned(repo, [...seen.keys()].filter(f => seen.get(f).e === o.e), [o.x.data.id], o.e.commits || []));
+    const changed = [...seen.keys()].filter(f => blobsNow[f] !== seen.get(f).blob).sort();
+    if (changed.length) {
+      const o = changed.map(f => seen.get(f)).sort((a, b) => String(b.e.when).localeCompare(String(a.e.when)))[0];
+      throw new Error(`${sn(s)}: the code changed after the last check (${o.e.when}${o.x !== s ? `, of ${sn(o.x)}` : ''}): run the checkpoint again. Changed: ${changed.slice(0, 3).join(', ')}${changed.length > 3 ? ` and ${changed.length - 3} more` : ''}`);
+    }
+    // And the fast tests (or full suite when validate:full is absent) must be green on the code as it is now (R173, R200, R239): the slice's own
+    // files are as checked, but work elsewhere may have broken what was checked. One run is shared by every acceptance while it is under 2 days old
+    // and got with the same tools; a project with no suite has nothing to ask.
+    if (evs.length && validateCommand(repo)) {
+      const hasFull = hasNpmScript(repo, 'validate:full');
+      const g = suiteGreen(repo, recordInputs(repo).evidence, { need: FAST_TESTS, now: now() });
+      if (!g.ok) throw new Error(`${sn(s)}: ${hasFull ? 'the fast tests have' : 'the whole test suite has'} not passed on the code as it is now (${g.why}): run ${hasFull ? 'a checkpoint or ' : 'it once with '}buddy suite, then accept again. One run serves every acceptance for 2 days with the same tools`);
     }
   }
   if (to === 'ready') {   // the ready rule (R114): criteria, exclusions, no blocking question open; the prototype's screens come later (R107)
@@ -541,7 +579,7 @@ export function moveSlice(repo, id, to, { by, channel = 'cli', now = () => new D
     const accepted = { by: 'owner', at: stamp(now), channel, assurance: 'recorded' };
     const writes = whole.map(x => ({ file: x.file, data: { ...x.data, status: 'accepted', accepted, updated: stamp(now) }, body: x.body }));
     commitAll(repo, writes.map(w => ({ file: w.file, text: canonicalText(w.data, w.body) })));
-    return { id, file: s.file, data: writes[0].data, body: s.body, pieces: delivered.map(x => x.data.id) };
+    return { id, file: s.file, files: writes.map(w => w.file), data: writes[0].data, body: s.body, pieces: delivered.map(x => x.data.id) };
   }
   const moved = rewrite(repo, id, ({ data, body }) => {
     data.status = to; if (head) data.base = head;
@@ -578,6 +616,10 @@ export const findBatchFile = (repo, id) => allBatches(repo).find(x => x.data.id 
 // The batches of a slice are the ones it lists and the ones that name it: `queue new` writes `slice` in the batch, the list in the slice is optional.
 export const batchesOf = (repo, slice) => allBatches(repo).filter(x => (slice.batches || []).includes(x.data.id) || x.data.slice === slice.id);
 
+// A milestone's whole plan (R282): its record, its changes and their pieces, their batches of questions and the map of what was asked;
+// the go-ahead commits it with it, so no part of the plan is left uncommitted when the first change starts.
+export const planFiles = (repo, id) => { const recs = [readSlice(repo, id), ...changesOf(repo, id).flatMap(c => [c, ...partsOf(repo, c.data.id)])];
+  return [...recs.map(r => r.file), ...recs.flatMap(r => batchesOf(repo, r.data).map(b => b.file)), path.join(repo, 'docs', 'buddy', 'requests.md')]; };
 // What was assumed on the Product Owner's behalf and nobody confirmed, across the slice's batches (R59: shown at acceptance).
 export const assumptionsOf = (repo, slice) => unconfirmedDefaults(batchesOf(repo, slice).map(x => x.file)).map(a => ({ ...a, file: path.relative(repo, a.file) }));
 // The same for the accept card, from the batches the index read (R148); `index` defaults to reading it.
@@ -595,7 +637,7 @@ function featureCard(repo, s, pieces, index) {
   if ((s.data.excludes || []).length) o.push('It does not include:', ...s.data.excludes.map(x => `  ${x.id}  ${x.text}`), '');
   o.push(`Its pieces (${pieces.filter(x => DONE.includes(x.data.status)).length} of ${pieces.length} delivered, accepted or abandoned):`, ...pieces.map(x => `  ${x.data.status.padEnd(9)} ${x.data.title} [${x.data.id}]`), '');
   const cache = new Map(); const dir = path.join(path.dirname(s.file), 'evidence');
-  const exc = pieces.filter(x => x.data.status === 'delivered').map(x => ({ x, list: pieceExceptions({ departures: 0 }, latestEvidence(dir, x.data.id, cache, x.data.reclassified)) })).filter(e => e.list.length);
+  const exc = pieces.filter(x => x.data.status === 'delivered').map(x => ({ x, list: openNotes(latestEvidence(dir, x.data.id, cache, x.data.reclassified), x.data) })).filter(e => e.list.length);
   if (exc.length) o.push(`Exceptions the checks found (${exc.length} piece(s)):`, ...exc.map(e => `  ${e.x.data.title} [${e.x.data.id}]: ${exceptionsText(e.list)}`), '');
   const dv = pieces.filter(x => x.data.status === 'delivered').flatMap(x => (x.data.divergences || []).filter(v => v.status !== 'accepted').map(v => ({ ...v, of: sn(x) })));
   if (dv.length) o.push(`Where the build departs from your prototype (${dv.filter(v => v.status === 'declared').length} to decide, ${dv.filter(v => v.status === 'rejected').length} rejected):`, ...dv.flatMap(v => [`  ${v.id} of ${v.of}  ${v.kind === 'improvement' ? 'improvement' : 'DIVERGENCE'} on screen ${v.screen} [${v.status}]`, `        the prototype ${v.prototype}`, `        built: ${v.built}`, `        why: ${v.why}`]), '', 'Say which to accept and which to reject (a rejected one goes back to Dev; its piece goes to rework).', '');
@@ -619,8 +661,8 @@ export function acceptCard(repo, id, { index } = {}) {
   if (isMilestone(s)) { const ch = changesOf(repo, id); o.push(`Its changes (${ch.filter(x => x.data.status === 'accepted').length} of ${ch.length} accepted):`, ...ch.map(x => `  ${x.data.status.padEnd(9)} ${sn(x)}`), ''); }
   const dv = s.data.divergences || [];
   if (dv.length) o.push(`Where the build departs from your prototype (${dv.filter(v => v.status === 'declared').length} to decide, ${dv.length} in all):`, ...dv.flatMap(v => [`  ${v.id}  ${v.kind === 'improvement' ? 'improvement' : 'DIVERGENCE'} on screen ${v.screen} [${v.status}]`, `        the prototype ${v.prototype}`, `        built: ${v.built}`, `        why: ${v.why}`]), '', 'Say which to accept and which to reject (a rejected one goes back to Dev; the slice goes to rework).', '');
-  const ev = s.folder ? latestEvidence(path.join(path.dirname(s.file), 'evidence'), id, undefined, s.data.reclassified) : null;
-  const un = s.folder ? unspecifiedOf(ev) : []; const costly = un.filter(d => d.costly);
+  const ev = latestEvidence(path.join(path.dirname(s.file), 'evidence'), id, undefined, s.data.reclassified);
+  const un = unspecifiedOf(ev); const costly = un.filter(d => d.costly);
   if (costly.length) o.push(`Costly decisions nobody specified, exceptions for you to decide (${costly.length}):`, ...costly.map(d => `  ${d.n}. ${d.text}`), '', 'Say for each whether it stays (it becomes an assumption you confirmed) or changes (the slice then goes to rework).', '');
   if ((s.data.unverified || []).length) o.push(`Screens you chose not to verify (${s.data.unverified.length}), still not a pass:`, ...s.data.unverified.map(u => `  ${u.screen}, decided ${u.at.slice(0, 10)}${u.note ? `: ${u.note}` : ''}`), '');
   apart(o, apartOf(ev));

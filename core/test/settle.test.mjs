@@ -28,7 +28,7 @@ test('a small correction with the checks green asks nothing of the owner, leaves
   const d = repo(); commit(d, 'docs: reword the readme', { 'README.md': 'a better readme\n' });
   const r = settle({ repo: d, since: 'HEAD~1', validate: ok });
   assert.equal(r.settled, true); assert.equal(r.record.kind, 'small-correction'); assert.equal(r.record.needs_owner, false); assert.deepEqual(r.record.deviations, []);
-  assert.match(r.text, /Nothing deviated/); assert.ok(fs.readdirSync(path.join(d, '.git/buddy/settled')).some(f => /^settled-.*\.json$/.test(f))); assert.ok(!fs.existsSync(path.join(d, 'docs/buddy')));
+  assert.match(r.text, /Nothing deviated/); assert.ok(fs.readdirSync(path.join(d, '.buddy/settled')).some(f => /^settled-.*\.json$/.test(f))); assert.ok(!fs.existsSync(path.join(d, 'docs/buddy')));
   const again = settle({ repo: d, validate: ok }); assert.equal(again.settled, false); assert.match(again.text, /Nothing to settle/);
   commit(d, 'style: tidy', { 'README.md': 'a better readme!\n' });
   assert.equal(settle({ repo: d, validate: ok }).settled, true, 'it goes on from where it settled');
@@ -74,7 +74,7 @@ test('a settle counts only the commits since the last settle\'s recorded head; -
   const ctx = commit(d, 'docs: the business context', { 'docs/context.md': 'purpose\n' });
   const first = settle({ repo: d, since: start, validate: ok }); assert.match(first.record.deviations.join(), /something specified was changed/);
   const rec = settledRecords(d).at(-1); assert.equal(rec.upto, ctx);
-  fs.rmSync(path.join(d, '.git/buddy/settled/upto'));                                         // the record alone tells where the last settle stopped
+  fs.rmSync(path.join(d, '.buddy/settled/upto'));                                         // the record alone tells where the last settle stopped
   const fix = commit(d, 'style: the label', { 'README.md': 'x, clearer\n' }); commit(d, 'style: again', { 'README.md': 'x, clearer still\n' });
   const next = settle({ repo: d, validate: ok });
   assert.equal(next.record.from, ctx); assert.deepEqual(next.record.commits.map(c => c.subject), ['style: the label', 'style: again']); assert.deepEqual(next.record.deviations, [], 'the old commit\'s warning is not repeated');
@@ -104,7 +104,7 @@ test('when the checks fail nothing is settled: no record, no mark, and the next 
   const red1 = settle({ repo: d, validate: red });
   assert.equal(red1.settled, false); assert.equal(red1.record.validate_exit, 1); assert.equal(red1.record.from, fix);
   assert.ok(red1.text.startsWith('NOT SETTLED  1 commit(s)'), red1.text); assert.match(red1.text, /nothing was marked settled: fix what fails and run buddy settle again/);
-  assert.equal(settledRecords(d).length, 1, 'no record of a red settle'); assert.equal(fs.readFileSync(path.join(d, '.git/buddy/settled/upto'), 'utf8').trim(), fix, 'the mark did not move');
+  assert.equal(settledRecords(d).length, 1, 'no record of a red settle'); assert.equal(fs.readFileSync(path.join(d, '.buddy/settled/upto'), 'utf8').trim(), fix, 'the mark did not move');
   const red2 = settle({ repo: d, validate: red }); assert.equal(red2.settled, false); assert.doesNotMatch(red2.text, /Nothing to settle/);
   const green = settle({ repo: d, validate: ok });
   assert.equal(green.settled, true); assert.deepEqual(green.record.commits.map(c => c.subject), ['fix: again']); assert.equal(green.record.upto, next);
@@ -113,7 +113,7 @@ test('when the checks fail nothing is settled: no record, no mark, and the next 
 test('a red settle recorded before this fix does not count as settled: the next one starts where it started', () => {
   const d = repo(); const start = G(d, 'rev-parse', 'HEAD').trim();
   const head = commit(d, 'fix: the label', { 'src/a.js': 'export const a = 2;\n', 'src/a.test.js': "import assert from 'node:assert';\nassert.equal(2, 2);\n" });
-  const dir = path.join(d, '.git/buddy/settled'); fs.mkdirSync(dir, { recursive: true });
+  const dir = path.join(d, '.buddy/settled'); fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, 'settled-20261104T100000Z-old.json'), JSON.stringify({ when: '2026-11-04T10:00:00Z', from: start, upto: head, commits: [{ hash: head.slice(0, 7), subject: 'fix: the label' }], validate_exit: 1, kind: 'small-correction', deviations: [], needs_owner: true }));
   fs.writeFileSync(path.join(dir, 'upto'), head + '\n');
   const r = settle({ repo: d, validate: ok }); assert.equal(r.settled, true); assert.equal(r.record.from, start); assert.deepEqual(r.record.commits.map(c => c.subject), ['fix: the label']);
@@ -121,7 +121,7 @@ test('a red settle recorded before this fix does not count as settled: the next 
 test('the command reports red checks, settles nothing and exits 1', () => {
   const d = repo(); fs.writeFileSync(path.join(d, 'package.json'), '{"name":"x","scripts":{"validate":"node -e \\"process.exit(3)\\""}}'); G(d, 'add', 'package.json'); G(d, 'commit', '-qm', 'chore: a validate that fails');
   const r = spawnSync(process.execPath, [fileURLToPath(new URL('../bin/buddy.mjs', import.meta.url)), 'settle', '--since', 'HEAD~1'], { cwd: d, encoding: 'utf8' });
-  assert.equal(r.status, 1, r.stderr); assert.match(r.stdout, /NOT SETTLED/); assert.match(r.stdout, /The checks FAIL/); assert.ok(!fs.existsSync(path.join(d, '.git/buddy/settled/upto')));
+  assert.equal(r.status, 1, r.stderr); assert.match(r.stdout, /NOT SETTLED/); assert.match(r.stdout, /The checks FAIL/); assert.ok(!fs.existsSync(path.join(d, '.buddy/settled/upto')));
 });
 test('a small correction of a few dozen lines over several commits, with its tests and notes, has not grown past a quick fix', () => {
   const d = repo(); const since = G(d, 'rev-parse', 'HEAD').trim();

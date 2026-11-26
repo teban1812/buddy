@@ -28,6 +28,26 @@ export function branchState(repo, branch) {
   return { state: gitOk(['merge-base', '--is-ancestor', branch, trunk], repo) ? 'merged' : 'pending', trunk };
 }
 
+// Commits at once the files an approval of the owner wrote, and only those (R281): `git commit --only`, so whatever else is changed or staged
+// (Dev's work in progress) stays as it was. A file new to git is marked first so git knows it. Returns { committed, sha, files } or, when git
+// cannot make the commit (not a repository, a hook refuses, .git read-only), { committed: false, why, files }: the approval stays written, it is
+// never retried another way. approvalNote is the line the commands print about it.
+export const APPROVAL = "chore: record the owner's ";   // the subject every such commit starts with: settle leaves them out
+export function commitApproval(repo, files, what) {
+  const top = git(['rev-parse', '--show-toplevel'], repo).trim(); const rel = [...new Set(files.filter(Boolean).map(f => path.relative(repo, path.resolve(repo, f))))];
+  if (!top) return { committed: false, why: 'this folder is not a git repository', files: rel };
+  const changed = rel.filter(f => git(['status', '--porcelain', '--', f], repo).trim()); if (!changed.length) return { committed: false, nothing: true, files: rel };
+  const run = args => spawnSync('git', args, { cwd: repo, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
+  const fresh = changed.filter(f => !gitOk(['ls-files', '--error-unmatch', '--', f], repo)); if (fresh.length) run(['add', '--intent-to-add', '--', ...fresh]);
+  const c = run(['commit', '--only', '-q', '-m', `${APPROVAL}${what}`.slice(0, 100), '--', ...changed]);
+  if (c.status !== 0) { if (fresh.length) run(['reset', '-q', '--', ...fresh]); return { committed: false, why: (`${c.stderr || ''}${c.stdout || ''}`.trim().split('\n').filter(Boolean).pop() || c.error?.message || 'git refused the commit').slice(0, 200), files: changed }; }
+  return { committed: true, sha: git(['rev-parse', '--short', 'HEAD'], repo).trim(), files: changed };
+}
+export const approvalNote = r => r.nothing ? '' : r.committed ? `committed the owner's approval (${r.sha}): ${r.files.join(', ')}`
+  : `the owner's approval is recorded but not committed (${r.why}): commit only ${r.files.join(', ')}, or tell the owner`;
+// Commits the approval and prints its line: on standard error, so a command's --json output stays one JSON document.
+export const recordApproval = (repo, files, what) => { const r = commitApproval(repo, files, what); const n = approvalNote(r); if (n) console.error(n); return r; };
+
 // True when the project's package.json has that script.
 export function hasNpmScript(repo, name) {
   try { return !!JSON.parse(fs.readFileSync(path.join(repo, 'package.json'), 'utf8')).scripts?.[name]; } catch { return false; }
@@ -41,10 +61,12 @@ export function npmScriptCommand(repo, name) {
   return process.platform === 'win32' ? { cmd: label, args: [], shell: true, label } : { cmd: 'npm', args: ['run', name], shell: false, label };
 }
 
-// How to run the project's validate command, or null when there is none. Order is unchanged from the prototype:
-// validate.sh, then the npm `validate` script; validate.sh is run with bash only if bash exists and no npm script is
-// available on Windows.
-export function validateCommand(repo) {
+// How to run the project's validate command for a test level (`fast`, `full` or `deep`), or null when there is none (R200, R239):
+// `fast` (default) uses validate.sh or npm `validate`; `full` uses npm `validate:full` and falls back to `fast` when absent;
+// `deep` uses npm `validate:deep` with no fallback.
+export function validateCommand(repo, level = 'fast') {
+  if (level === 'deep') return npmScriptCommand(repo, 'validate:deep');
+  if (level === 'full') { const full = npmScriptCommand(repo, 'validate:full'); if (full) return full; }
   const sh = fs.existsSync(path.join(repo, 'validate.sh'));
   if (sh && !(process.platform === 'win32' && hasNpmScript(repo, 'validate'))) return { cmd: 'bash', args: ['./validate.sh'], shell: false, label: 'validate.sh' };
   return npmScriptCommand(repo, 'validate');
@@ -54,9 +76,9 @@ export function validateCommand(repo) {
 // 30 minutes; the environment variable BUDDY_VALIDATE_TIMEOUT, in seconds, changes it) and everything it started is ended with it.
 // A stopped validate has status 124 and says so in stderr.
 export const VALIDATE_TIMEOUT_SEC = 30 * 60;
-export function runValidate(repo, { timeoutSec } = {}) {
-  const c = validateCommand(repo);
-  if (!c) return { status: 127, missing: true, stdout: '', stderr: 'no validate.sh and no npm validate script found' };
+export function runValidate(repo, { timeoutSec, level = 'fast' } = {}) {
+  const c = validateCommand(repo, level);
+  if (!c) return { status: 127, missing: true, stdout: '', stderr: level === 'deep' ? 'no npm validate:deep script found in package.json' : 'no validate.sh and no npm validate script found' };
   const env = Number(process.env.BUDDY_VALIDATE_TIMEOUT); const sec = timeoutSec ?? (env > 0 ? env : VALIDATE_TIMEOUT_SEC);
   const run = spawnSync(process.execPath, [fileURLToPath(new URL('./validaterun.mjs', import.meta.url)), JSON.stringify({ c, cwd: repo, timeoutMs: sec * 1000 })], { encoding: 'utf8', maxBuffer: MAX, timeout: sec * 1000 + 30000, killSignal: 'SIGKILL' });
   let r; try { r = JSON.parse(run.stdout); } catch { return { status: 124, timedOut: true, stdout: '', stderr: `validate did not report back after ${sec} seconds and was stopped` }; }

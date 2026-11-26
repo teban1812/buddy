@@ -47,7 +47,7 @@ test('the text says how much, how it was estimated, that it is a floor, and how 
   assert.deepEqual(effortLines(ownerEffort([]), { files: 0 }), []);
 });
 test('buddy minutes puts the owner\'s effort first, from the records of the machine or of a folder given with --transcripts', () => {
-  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'ot2-')); const repo = path.join(home, 'proj'); fs.mkdirSync(path.join(repo, 'docs', 'buddy', 'backlog'), { recursive: true }); execFileSync('git', ['init', '-q'], { cwd: repo });
+  const home = fs.realpathSync(fs.mkdtempSync(path.join(os.tmpdir(), 'ot2-'))); const repo = path.join(home, 'proj'); fs.mkdirSync(path.join(repo, 'docs', 'buddy', 'backlog'), { recursive: true }); execFileSync('git', ['init', '-q'], { cwd: repo });
   const enc = path.resolve(repo).replace(/[^a-zA-Z0-9]/g, '-'); const dir = path.join(home, '.claude', 'projects', enc); fs.mkdirSync(dir, { recursive: true });
   const lines = [agent('2026-11-01T10:00:00Z', w(400)), human('2026-11-01T10:01:00Z', w(40))].map(e => JSON.stringify(e)).join('\n');
   fs.writeFileSync(path.join(dir, 's1.jsonl'), lines);

@@ -14,8 +14,8 @@ const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'cli-'));
 
 test('buddy help lists every command and exits 0; an unknown command exits 2', () => {
   const h = run(['help']); assert.equal(h.status, 0);
-  for (const c of ['context', 'queue', 'scope', 'scan', 'decide', 'verify', 'checkpoint', 'view']) assert.match(h.stdout, new RegExp(`\\n  ${c} `));
-  assert.equal(run(['nope']).status, 2);
+  for (const c of ['context', 'queue', 'scan', 'decide', 'verify', 'checkpoint', 'view']) assert.match(h.stdout, new RegExp(`\\n  ${c} `));
+  assert.equal(run(['nope']).status, 2); assert.equal(run(['scope']).status, 2);
 });
 const EXAMPLES = fileURLToPath(new URL('../../docs/design/examples', import.meta.url));
 test('buddy verify forwards the exit code', () => {

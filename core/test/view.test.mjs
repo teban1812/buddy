@@ -8,7 +8,7 @@ import { spawnSync } from 'node:child_process';
 import { loadStory } from '../src/story.mjs';
 const ID = 'archive-a-book';                              // the examples folder holds three slices; the story is of this one
 const load = (d, o = {}) => loadStory(d, { slice: ID, ...o });
-import { renderView, summaryText, needsOwner, scopeLine } from '../src/view.mjs';
+import { renderView, summaryText, needsOwner } from '../src/view.mjs';
 import { verify } from '../src/verify.mjs';
 
 const EX = fileURLToPath(new URL('../../docs/design/examples/', import.meta.url));
@@ -26,16 +26,10 @@ test('needsOwner lists open findings and assumed defaults, once each', WORKSHOP,
   assert.ok(n.some(i => /add-book form/.test(i.text)));
   assert.equal(n.filter(i => /hidden in the archive view|Hide it/.test(i.text)).length, 1);
 });
-test('the C4 sample verifies and its summary shows built, left out, size, unconfirmed defaults and an honest scope slot', WORKSHOP, () => {
+test('the C4 sample verifies and its summary shows built, left out, size, unconfirmed defaults', WORKSHOP, () => {
   assert.deepEqual(verify([SAMPLE]).problems, []);
   const t = summaryText(loadStory(SAMPLE));
-  assert.match(t, /Built:/); assert.match(t, /Left out:/); assert.match(t, /Size: 9 files/); assert.match(t, /not measured/); assert.match(t, /\[assumed\]/); assert.match(t, /over-built/);
-});
-test('scope shares appear in the summary and as a bar in the page', WORKSHOP, () => {
-  const scope = { share: { answer: 75, risk: 5, request: 10, initiative: 8, unclear: 2 }, total_added: 100, test_lines: 40, items: [{ source: 'initiative', file: 'a.ts', lines: 8, sample: 'extra' }] };
-  assert.match(scopeLine(scope), /75 % from your answers/);
-  const html = renderView(load(EX), { scope });
-  assert.match(html, /class="bar"/); assert.match(html, /a\.ts/); assert.match(summaryText(load(EX), { scope }), /75 % from your answers/);
+  assert.match(t, /Built:/); assert.match(t, /Left out:/); assert.match(t, /Size: 9 files/); assert.match(t, /\[assumed\]/); assert.match(t, /over-built/);
 });
 test('the page escapes content, has no external references, and strikes superseded decisions', WORKSHOP, () => {
   const html = renderView(load(EX));

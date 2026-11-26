@@ -8,7 +8,6 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { execSync, spawnSync } from 'node:child_process';
 import { scan } from '../src/scan.mjs';
-import { verifyMadr } from '../src/decide.mjs';
 import { checkpoint } from '../src/checkpoint.mjs';
 
 const ROOT = fileURLToPath(new URL('../../', import.meta.url)).replace(/[\\/]$/, '');
@@ -52,18 +51,6 @@ test('scan equals gaming-scan.mjs on a gaming change and on an honest one', opts
   assert.equal(scan(baseRepo(), 'HEAD').flagged, false);
 });
 
-// buddy decide no longer writes numbered files: the old ones are only read, and verifyMadr reads them as the prototype did.
-test('verifyMadr equals buddy.mjs verify on the numbered files the prototype wrote', opts, () => {
-  const a = tmp('mad-'), b = tmp('mad-'); const args = { title: 'Use a flag for archived books', 'requested-by': 'owner', context: 'ctx', options: 'a; b', outcome: 'a', reason: 'simple', consequences: 'none' };
-  for (const d of [a, b]) git(d, 'init -q -b main');
-  const argv = Object.entries(args).flatMap(([k, v]) => [`--${k}`, v]);
-  const r = spawnSync('node', [`${PROBES}/buddycli/buddy.mjs`, 'decide', ...argv], { cwd: a, encoding: 'utf8' });
-  const file = r.stdout.trim().replace(/^wrote /, ''); write(b, file, fs.readFileSync(path.join(a, file), 'utf8'));
-  for (const d of [a, b]) { write(d, 'docs/decisions/0003-gap.md', '# x\n'); }
-  const pv = spawnSync('node', [`${PROBES}/buddycli/buddy.mjs`, 'verify'], { cwd: a, encoding: 'utf8' });
-  assert.equal(pv.status, 1); assert.deepEqual(verifyMadr({}, b).problems, pv.stderr.trim().split('\n'));
-});
-
 test('checkpoint equals buddy-v2.mjs final (same evidence, same decision text), with a stub reviewer on PATH', opts, () => {
   const bin = tmp('fakeclaude-'); const reply = JSON.stringify({ result: JSON.stringify({ does_what_was_asked: true, weakens_or_hides_checks: false, unspecified_decisions: ['one thing nobody specified'], details: 'looks fine' }), total_cost_usd: 0.001 });
   const stream = JSON.stringify({ type: 'result', ...JSON.parse(reply) });   // the prototype asks for json, the core for stream-json (R128)
@@ -71,17 +58,19 @@ test('checkpoint equals buddy-v2.mjs final (same evidence, same decision text), 
   const home = tmp('home-'); fs.mkdirSync(path.join(home, 'Dev'), { recursive: true }); fs.symlinkSync(ROOT, path.join(home, 'Dev/Buddy-core'));
   const env = { ...process.env, PATH: `${bin}:${process.env.PATH}`, HOME: home };
   const savedPath = process.env.PATH; process.env.PATH = env.PATH;
+  const savedHome = process.env.BUDDY_HOME, savedTool = process.env.BUDDY_TOOL; process.env.BUDDY_HOME = path.join(home, 'buddy'); process.env.BUDDY_TOOL = env.BUDDY_TOOL = 'claude';   // Buddy in Claude Code, so the review goes to the stub claude, never to a real agy on this machine (R235)
   try {
     for (const [change, label] of [[honestChange, 'clean'], [gamingChange, 'gaming']]) {
       const a = baseRepo(); change(a); const b = copy(a);
-      for (const d of [a, b]) { fs.mkdirSync(path.join(d, '.git/buddy'), { recursive: true }); write(d, '.git/buddy/request.txt', 'Add the c module with a test.'); write(d, 'notes.md', '## Assumptions made since checkpoint 0\nnone\n'); }
+      fs.mkdirSync(path.join(a, '.git/buddy'), { recursive: true }); write(a, '.git/buddy/request.txt', 'Add the c module with a test.'); write(a, 'notes.md', '## Assumptions made since checkpoint 0\nnone\n');
+      fs.mkdirSync(path.join(b, '.buddy'), { recursive: true }); write(b, '.buddy/request.txt', 'Add the c module with a test.'); write(b, 'notes.md', '## Assumptions made since checkpoint 0\nnone\n');
       const proto = spawnSync('node', [`${PROBES}/dotnet/buddy-v2.mjs`, 'final', '--run', 'par', '--notes', 'notes.md', '--human', '1'], { cwd: a, encoding: 'utf8', env });
       const mine = checkpoint({ repo: b, id: 'par', notes: fs.readFileSync(path.join(b, 'notes.md'), 'utf8'), human: true, log: path.join(home, 'log.md') });
-      const ev = d => { const f = fs.readdirSync(path.join(d, '.git/buddy')).filter(x => /^evidence-.*\.json$/.test(x) && !/\.summary\.json$/.test(x)).sort().pop(); const e = JSON.parse(fs.readFileSync(path.join(d, '.git/buddy', f), 'utf8')); delete e.when; return e; };
+      const ev = (d, dir) => { const f = fs.readdirSync(path.join(d, dir)).filter(x => /^evidence-.*\.json$/.test(x) && !/\.summary\.json$/.test(x)).sort().pop(); const e = JSON.parse(fs.readFileSync(path.join(d, dir, f), 'utf8')); delete e.when; return e; };
       // `base` (what the checkpoint measured against) is newer than the prototype: it must be there, and every other field must still equal the prototype's.
-      const mineEv = ev(b); assert.equal(mineEv.base, 'HEAD', label); delete mineEv.base;
+      const mineEv = ev(b, '.buddy'); assert.equal(mineEv.base, 'HEAD', label); delete mineEv.base;
       assert.deepEqual(Object.keys(mineEv.review_input).sort(), ['diff_chars', 'not_reviewed', 'not_shown', 'opened_by_the_reviewer', 'reviewer_opened', 'shown_chars'], label); delete mineEv.review_input; delete mineEv.review.opened;   // newer than the prototype: what the reviewer was given
-      assert.match(mineEv.handover.reviewer.path, /^\.git\/buddy\/handover\/run-review-.*-par\.md$/, label); delete mineEv.handover;   // newer: the reviewer's hand-over file (R134)
+      assert.match(mineEv.handover.reviewer.path, /^\.buddy\/handover\/run-review-.*-par\.md$/, label); delete mineEv.handover;   // newer: the reviewer's hand-over file (R134)
       // newer than the prototype: the reviewer is asked with a green validate even when the scan has flags, and judges each flag (R216); the rounds are counted.
       // The prototype never asked the reviewer about a flag, so the program's added question to the reviewer (and what it says of a flag the stub did not judge) is the one difference.
       let mineText = mine.text.trim();
@@ -90,10 +79,10 @@ test('checkpoint equals buddy-v2.mjs final (same evidence, same decision text), 
         assert.ok(!mineEv.review.not_run, 'the reviewer runs when only the scan is red (R216)');
         assert.ok(mineEv.reasons.pop().startsWith('the reviewer did not say whether editing')); const bare = r => r.split(unjudged).join('').replace(/^(skip\/ignore\/disable markers added): .*$/, '$1'); mineEv.reasons = mineEv.reasons.map(bare); delete mineEv.round;
         mineText = mineText.split('\n').filter(l => !l.startsWith('# - the reviewer did not say whether editing') && !l.startsWith('- the reviewer did not say whether editing')).map(l => bare(l.replace(/^- (?=skip)/, '')).replace(/^(?=skip\/)/, l.startsWith('- ') ? '- ' : '')).join('\n');
-        mineEv.review = ev(a).review;
+        mineEv.review = ev(a, '.git/buddy').review;
         mineText = mineText.replace(/DECISIONS NOBODY SPECIFIED[^\n]*\n[^\n]*\n/, m => m.replace(/\n- none\n/, '\n- one thing nobody specified\n'));
       } else delete mineEv.round;
-      const protoEv = ev(a);
+      const protoEv = ev(a, '.git/buddy');
       // fields the core added after the prototype (the checks line, the code fingerprint, which tests ran, the scan's skipped generated files): the core has them, the prototype never will
       const NEWER = ['checks', 'code_hash', 'tests', 'environment']; for (const k of Object.keys(mineEv)) if (!(k in protoEv)) { assert.ok(NEWER.includes(k), `new field ${k} in the evidence: say here that it is newer than the prototype`); delete mineEv[k]; }
       assert.deepEqual(mineEv.scan.skipped_generated, []); delete mineEv.scan.skipped_generated; for (const e of [mineEv, protoEv]) e.scan.modified_existing_tests = e.scan.modified_existing_tests.map(x => x.replace(/ \(-\d+ lines\)$/, ''));   // see sameScan
@@ -109,5 +98,5 @@ test('checkpoint equals buddy-v2.mjs final (same evidence, same decision text), 
       assert.equal(noCount(mineText.replace('diff from HEAD:', 'diff:')), noCount(proto.stdout.trim()), label);
       assert.equal(mine.decision, label === 'clean' ? 'APPROVE' : 'NEEDS_HUMAN');
     }
-  } finally { process.env.PATH = savedPath; }
+  } finally { process.env.PATH = savedPath; if (savedHome === undefined) delete process.env.BUDDY_HOME; else process.env.BUDDY_HOME = savedHome; if (savedTool === undefined) delete process.env.BUDDY_TOOL; else process.env.BUDDY_TOOL = savedTool; }
 });

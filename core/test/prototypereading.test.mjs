@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { spawnSync } from 'node:child_process';
-import { readPrototype, prototypeFacts, fromReading, draftManifest, readManifest, addToManifest, manifestProblems, screensBrief, keyOfStatement, statementsOf, readingShape, MANIFEST, READING, SECTIONS } from '../src/prototype.mjs';
+import { prototypeFacts, fromReading, draftManifest, readManifest, addToManifest, manifestProblems, screensBrief, keyOfStatement, statementsOf, readingShape, MANIFEST, READING, SECTIONS } from '../src/prototype.mjs';
 import { verify } from '../src/verify.mjs';
 
 const BIN = fileURLToPath(new URL('../bin/buddy.mjs', import.meta.url));
@@ -41,18 +41,10 @@ test('facts list the data-nav links and the functions of the scripts, without de
   const r = run(project(null), 'facts'); assert.equal(r.status, 0); assert.match(r.stdout, /Mockup\.html: 1 id\(s\), 4 link\(s\)/); assert.match(r.stdout, /link {3}"Tablero" href=# data-nav="dashboard"/); assert.match(r.stdout, /script functions: renderApps, renderDashboard/);
   assert.equal(JSON.parse(run(project(null), 'facts', '--json').stdout).files[0].links.length, 4);
 });
-test('the program\'s own reading says the menu is navigation by script, not a link that goes nowhere', () => {
-  const p = readPrototype(files); const s = p.screens[0];
-  assert.deepEqual(s.unread, ['navigation by script, not read: link "Aplicaciones"', 'navigation by script, not read: link "Tablero"', 'navigation by script, not read: link "Personas"', 'navigation by script, not read: link "Catálogos"']);
-  assert.ok(!s.fake.some(f => /goes nowhere/.test(f)));
-  const plain = readPrototype([{ name: 'a.html', html: '<a href="#" data-nav="x">X</a>' }]).screens[0]; assert.deepEqual(plain.fake, ['goes nowhere: link "X"']);      // without scripts it does go nowhere
-  const stmts = statementsOf(p); assert.ok(stmts.some(x => x.section === SECTIONS.notes && x.text === '`mockup`: navigation by script, not read: link "Tablero"'));
-  for (const x of stmts) assert.equal(keyOfStatement(x.section, x.text), x.key, x.text);
-});
 test('a reading with four screens drafts four screens, each saying where it comes from', () => {
   const p = fromReading(READ, files); assert.deepEqual(p.problems, []);
   const d = project(); fs.writeFileSync(path.join(d, MANIFEST), draftManifest(p, { date: '2026-11-02' })); const m = readManifest(path.join(d, MANIFEST));
-  assert.deepEqual(m.screens.map(s => s.name), ['apps', 'dashboard', 'people', 'catalogs']); assert.equal(m.data.reading, READING); assert.equal(m.data.fingerprint, readPrototype(files).fingerprint);
+  assert.deepEqual(m.screens.map(s => s.name), ['apps', 'dashboard', 'people', 'catalogs']); assert.equal(m.data.reading, READING); assert.equal(m.data.fingerprint, prototypeFacts(files).fingerprint);
   assert.match(m.screens[1].text, /^`dashboard` Tablero \(Mockup\.html\) — from: data-nav="dashboard"; const renderDashboard$/);
   assert.ok(m.statements.some(s => s.section === SECTIONS.flows && s.text === '`apps` to `dashboard` through "Tablero"'));
   assert.ok(m.statements.some(s => s.section === SECTIONS.fake && s.text === '`dashboard`: the figures are sample data'));
@@ -90,7 +82,9 @@ test('the owner adds a screen the draft missed; it is confirmed, marked as their
   assert.equal(run(d, 'draft', '--reading').status, 0); m = readManifest(path.join(d, MANIFEST));
   assert.deepEqual(m.screens.map(s => s.name), ['apps', 'dashboard', 'people', 'catalogs', 'settings']); assert.ok(!m.statements.some(s => s.section === SECTIONS.gone));
   assert.ok(m.statements.some(s => s.section === SECTIONS.flows && s.text === '`settings` to `apps` through "Volver" (declared by the owner)' && s.origin === 'human'));
-  assert.equal(run(d, 'draft').status, 0); assert.ok(readManifest(path.join(d, MANIFEST)).screens.some(s => s.name === 'settings'));       // also without --reading
+  const plain = run(d, 'draft'); assert.equal(plain.status, 1); assert.match(plain.stderr, /refused: a draft comes only from Buddy's reading: write it first \(`prototype facts`, then docs\/inputs\/prototype\/reading\.json\), then `prototype draft --reading`/);
+  assert.ok(readManifest(path.join(d, MANIFEST)).screens.some(s => s.name === 'settings'));       // the refusal leaves the manifest as it was
+  assert.equal(run(d, 'scan').status, 2);       // the program no longer reads a prototype on its own
   assert.deepEqual(verify([path.join(d, 'docs')]).problems, []);
   assert.match(run(d, 'add', '--section', 'screens', '--text', 'Settings page').stderr, /a screen starts with its name in backticks/);
   assert.match(run(d, 'add', '--section', 'screens', '--text', '`settings` Again').stderr, /already has a screen `settings`/);
@@ -105,7 +99,7 @@ test('the screens brief that Dev and the reviewer receive uses Buddy\'s reading 
   assert.match(t, /### Screen `dashboard` — Tablero \(docs\/inputs\/prototype\/Mockup\.html\)/); assert.match(t, /Where it is in the prototype: data-nav="dashboard" \| const renderDashboard/);
   assert.match(t, /Comes from: apps \(through "Tablero"\)/); assert.match(t, /Fake or only an example: the figures are sample data/); assert.match(t, /Manifest: `dashboard` Tablero/);
   assert.match(t, /### Screen `apps` — Aplicaciones[\s\S]*Goes to: dashboard \(through "Tablero"\)/);
-  fs.rmSync(path.join(d, READING)); const old = screensBrief(d, ['mockup']).text; assert.match(old, /### Screen `mockup`/); assert.match(old, /Not read by the program: navigation by script, not read: link "Aplicaciones"/);   // without a reading, as before
+  fs.rmSync(path.join(d, READING)); const none = screensBrief(d, ['apps']).text; assert.match(none, /### Screen `apps` \(docs\/inputs\/prototype\/reading\.json is missing: write it/); assert.match(none, /Manifest: `apps` Aplicaciones/); assert.doesNotMatch(none, /Its HTML/);   // without a reading the brief still names the manifest and says so
 });
 
 // fix-checks-from-field (R155, AC3): with Buddy's reading, each screen's brief carries its fragment of the prototype's HTML, bounded.
@@ -117,7 +111,7 @@ test('with a reading, each screen of the brief carries the HTML its evidence poi
   assert.match(people, /Its HTML in the prototype \(the element the reading points at\):\n```html\n<a href="#" data-nav="people">Personas<\/a>\n```/);
   const dashboard = t.slice(0, t.indexOf('### Screen `people`'));
   assert.match(dashboard, /the elements the reading points at/); assert.ok(dashboard.includes('<a href="#" data-nav="dashboard">Tablero</a>')); assert.ok(dashboard.includes('const renderDashboard = () =>'), 'the script that draws it');
-  fs.rmSync(path.join(d, READING)); assert.doesNotMatch(screensBrief(d, ['mockup']).text, /Its HTML in the prototype/, 'without a reading, as before');
+  fs.rmSync(path.join(d, READING)); assert.doesNotMatch(screensBrief(d, ['mockup']).text, /Its HTML in the prototype/, 'without a reading, no HTML');
 });
 test('a fragment is the smallest element holding each evidence, whitespace squashed, and a long one is cut and says so', () => {
   const html = '<body>\n<section id="login">\n  <h1>Sign\n   in</h1><button>Go</button></section><p>other</p></body>';
@@ -139,4 +133,15 @@ test('evidence inside a script gives the named function that holds it, or the li
   const p = project(); fs.writeFileSync(path.join(p, 'docs/inputs/prototype/app.html'), html);
   fs.writeFileSync(path.join(p, READING), JSON.stringify({ screens: [{ name: 'login', title: 'Sign in', file: 'app.html', evidence: ['<h1>Sign in</h1>'] }] }));
   assert.match(screensBrief(p, ['login']).text, /Its code in the prototype \(the script that draws it: the function holding what the reading points at\):\n```js\nfunction renderLogin\(\) \{/);
+});
+
+// R268: the zones the owner fixed (data-buddy-zone="fixed") are still told to Dev and the reviewer, found around the evidence of each screen.
+test('the brief names the zones the owner fixed in each screen, and the manifest lists them', () => {
+  const html = '<section id="list"><h1>Reading list</h1><p data-buddy-zone="fixed">Prices include tax</p><p data-buddy-zone="illustrative">Sample</p></section><section id="add"><h2>Add a book</h2><p data-buddy-zone="fixed">Max 5 per day</p></section>';
+  const d = project(); fs.writeFileSync(path.join(d, 'docs/inputs/prototype/shop.html'), html);
+  fs.writeFileSync(path.join(d, READING), JSON.stringify({ screens: [{ name: 'list', title: 'Reading list', file: 'shop.html', evidence: ['<h1>Reading list</h1>'] }, { name: 'add', title: 'Add a book', file: 'shop.html', evidence: ['<h2>Add a book</h2>'] }] }));
+  assert.equal(run(d, 'draft', '--reading').status, 0); const t = screensBrief(d, ['list', 'add']).text;
+  const list = t.slice(0, t.indexOf('### Screen `add`')); const add = t.slice(t.indexOf('### Screen `add`'));
+  assert.match(list, /Fixed by the owner \(do not change without asking\): Prices include tax\n/); assert.doesNotMatch(list, /Max 5/); assert.match(add, /Fixed by the owner \(do not change without asking\): Max 5 per day\n/);
+  assert.ok(readManifest(path.join(d, MANIFEST)).statements.some(s => s.section === SECTIONS.fixed && s.text === '`list`: Prices include tax (fixed)'));
 });

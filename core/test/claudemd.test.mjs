@@ -44,3 +44,35 @@ test('a CLAUDE.md the folder already had is only appended to; what the team wrot
   const r = run(['init', '--no-library'], d); assert.equal(r.status, 0, r.stderr);
   const t = claude(d); assert.ok(t.startsWith('# Our rules\nNever deploy on Fridays.\n')); assert.ok(t.endsWith(BLOCK)); assert.match(r.stdout, /merged +CLAUDE\.md[^\n]*added at the end/);
 });
+
+// Init brings each tool found its instructions (support-antigravity, step 6.1): stand-ins on a scratch PATH, no model.
+const machine = tools => { const bin = tmp(); for (const t of ['git', 'node']) fs.symlinkSync(execSync(`command -v ${t}`, { encoding: 'utf8' }).trim(), path.join(bin, t)); for (const t of tools) fs.writeFileSync(path.join(bin, t), '#!/bin/sh\n', { mode: 0o755 }); return bin; };
+const born = (tools, setup = () => {}) => { const d = project(); setup(d); const r = spawnSync('node', [BUDDY, 'init', '--no-library'], { encoding: 'utf8', cwd: d, env: { ...process.env, HOME, USERPROFILE: HOME, PATH: machine(tools), GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t' } }); assert.equal(r.status, 0, r.stderr); return { d, r, has: f => fs.existsSync(path.join(d, f)) }; };
+const posix = process.platform !== 'win32';
+
+test('with both tools, CLAUDE.md and AGENTS.md hold the same block; no GEMINI.md', { skip: !posix }, () => {
+  const { d, r, has } = born(['claude', 'agy']);
+  assert.equal(claude(d), BLOCK); assert.equal(fs.readFileSync(path.join(d, 'AGENTS.md'), 'utf8'), BLOCK); assert.equal(has('GEMINI.md'), false);
+  assert.match(r.stdout, /created +AGENTS\.md/); assert.ok(has('.claude/settings.json'));
+});
+test('with Claude Code only, init writes what 0.4.0 wrote: CLAUDE.md and the permissions, no AGENTS.md', { skip: !posix }, () => {
+  const { has, d } = born(['claude']); assert.equal(has('AGENTS.md'), false); assert.equal(claude(d), BLOCK); assert.ok(has('.claude/settings.json'));
+});
+test('with Antigravity only, init writes AGENTS.md and nothing for Claude Code', { skip: !posix }, () => {
+  const { has, d, r } = born(['agy']); assert.equal(fs.readFileSync(path.join(d, 'AGENTS.md'), 'utf8'), BLOCK); assert.equal(has('CLAUDE.md'), false); assert.equal(has('.claude'), false);
+  assert.ok(!/AGENTS\.md[^\n]*git commit/.test(r.stdout)); assert.match(spawnSync('git', ['show', '--name-only', '--format='], { cwd: d, encoding: 'utf8' }).stdout, /AGENTS\.md/);
+});
+test('with neither tool found init falls back to Claude Code, as in 0.4.0', { skip: !posix }, () => {
+  const { has } = born([]); assert.ok(has('CLAUDE.md')); assert.equal(has('AGENTS.md'), false);
+});
+test('an AGENTS.md the folder already had is only appended to, and a second init keeps both files', { skip: !posix }, () => {
+  const { d } = born(['claude', 'agy'], d => fs.writeFileSync(path.join(d, 'AGENTS.md'), '# Ours\n'));
+  const t = fs.readFileSync(path.join(d, 'AGENTS.md'), 'utf8'); assert.ok(t.startsWith('# Ours\n') && t.endsWith(BLOCK));
+  const again = spawnSync('node', [BUDDY, 'init', '--no-library'], { encoding: 'utf8', cwd: d, env: { ...process.env, HOME, USERPROFILE: HOME, PATH: machine(['claude', 'agy']) } });
+  assert.match(again.stdout, /kept +AGENTS\.md/); assert.equal(fs.readFileSync(path.join(d, 'AGENTS.md'), 'utf8'), t);
+});
+test('a template that brings its own CLAUDE.md is merged as before, and AGENTS.md gets only the block', { skip: !posix }, () => {
+  const lib = library({ 'standards/p/rules.md': '# rules\n', 'templates/p/CLAUDE.md': '# Shop\nRun `npm test`.\n', 'templates/p/README.md': '# app\n' });
+  const d = project(); const r = spawnSync('node', [BUDDY, 'init', '--library', lib, '--profile', 'p'], { encoding: 'utf8', cwd: d, env: { ...process.env, HOME, USERPROFILE: HOME, PATH: machine(['claude', 'agy']) } }); assert.equal(r.status, 0, r.stderr);
+  assert.ok(claude(d).includes('Run `npm test`.')); assert.equal(fs.readFileSync(path.join(d, 'AGENTS.md'), 'utf8'), BLOCK);
+});

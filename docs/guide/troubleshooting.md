@@ -34,14 +34,6 @@ Problems people have really met with Buddy, and their fixes. If yours is not her
 
 **Fix**: check it in your terminal with `git ls-remote <library url>`. If it asks for a password or fails, sign in to that host with git first (for GitHub, for example, the GitHub CLI's `gh auth login`, or your system's git credential manager), or ask the library's owner for read access. To start without a library, tell Buddy so: `--no-library` gives a project with no standards and no base application.
 
-## Every command fails after you put a file in a change's folder
-
-**What you see**: after you saved a note of your own (a `.md` file) in a change's folder under `docs/buddy/`, Buddy's commands stop with an error about that file.
-
-**Why**: the program reads every markdown file in that folder as one of its records. This is being fixed.
-
-**Fix**: move your file out of `docs/buddy/`. Keep your own notes elsewhere, for example in `docs/inputs/` or a folder of your own.
-
 ## The checkpoint finds no work in a slice
 
 **What you see**: the checkpoint says the slice has no commits, or measures nothing, though Dev committed.
@@ -49,6 +41,22 @@ Problems people have really met with Buddy, and their fixes. If yours is not her
 **Why**: the checkpoint finds a slice's commits by the `Slice: <name>` line at the end of the commit message. git reads it only in the message's last paragraph; in its own paragraph above `Co-Authored-By:` it is not read.
 
 **Fix**: ask Buddy to have Dev amend the message so `Slice:` and `Co-Authored-By:` are together in the last paragraph, one per line, then run the checkpoint again.
+
+## The board's page does not change
+
+**What you see**: the page you opened in the browser stays as it was while Buddy works.
+
+**Why**: Buddy rewrites the page after each command that changes a record only when the page is `.buddy/board.html`; a page written elsewhere is a one-off copy. The page also holds its refresh while you select text or use one of its controls, and stops when you press its *Pause updates* button.
+
+**Fix**: ask Buddy for the board's page again (`buddy board --out .buddy/board.html`) and open that file; let go of the selection, or press *Resume updates*.
+
+## The panel says nothing about your project
+
+**What you see**: in Antigravity App, the panel asks to connect to the project, or shows nothing.
+
+**Why**: Antigravity starts the panel without telling it which project is open, so it learns it from the conversation.
+
+**Fix**: press its connect button and send the request it writes into the conversation.
 
 ## The tests fail only while your app is running
 
@@ -63,7 +71,7 @@ Problems people have really met with Buddy, and their fixes. If yours is not her
 **What you see**: Buddy says the change cannot be accepted yet.
 
 **Why**, and fix, by the reason it gives:
-- *the whole test suite has not passed on the code as it is now*: Buddy runs `buddy suite` once, then accepts again.
+- *the whole test suite has not passed on the code as it is now* (when closing a milestone): Buddy runs `buddy suite` once, then accepts again.
 - *an assumption is not confirmed*: confirm it or correct it.
 - *a departure from the prototype is undecided*: accept or reject it.
 - *a step is open, or a finding is open*: the work is not finished; Buddy sends it back to Dev.

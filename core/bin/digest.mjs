@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 // usage: digest.mjs [--repo <dir>] [--since <ISO time>] [--now <ISO time>] [--stale-minutes N] [--mark] [--json]
 // Radiator R10: what changed since the Product Owner last looked. The PO cannot be notified when absent (R65), so this is the answer to
-// "how are things going?". It reads only; with --mark it then records `now` as the last look (.git/buddy/last-looked). Without --since it starts from that mark.
+// "how are things going?". It reads only; with --mark it then records `now` as the last look (.buddy/last-looked). Without --since it starts from that mark.
 import { digest, digestText, writeMark } from '../src/digest.mjs';
 import { refreshIndex } from '../src/index.mjs';
 const a = process.argv.slice(2); const o = {}; for (let i = 0; i < a.length; i++) if (a[i].startsWith('--')) { const k = a[i].slice(2); o[k] = ['json', 'mark'].includes(k) ? true : a[++i]; }

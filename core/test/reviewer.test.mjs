@@ -47,13 +47,15 @@ test('the reviewer is given what Dev was given: criteria, exclusions and the fil
 });
 
 import { claudeReviewer } from '../src/checkpoint.mjs';
+import { plan } from '../src/tools.mjs';
+const CLAUDE_ONLY = (() => { const d = fs.mkdtempSync(path.join(os.tmpdir(), 'rv-')); fs.mkdirSync(path.join(d, 'bin')); fs.writeFileSync(path.join(d, 'bin/claude'), '#!/bin/sh\n'); fs.chmodSync(path.join(d, 'bin/claude'), 0o755); return { PATH: path.join(d, 'bin'), BUDDY_HOME: path.join(d, 'home'), CLAUDE_PLUGIN_ROOT: '/x' }; })();
 test('the reviewer gets its hand-over through standard input, and says why when it cannot start or ends without a verdict (R134)', () => {
-  let call; const rv = claudeReviewer({ spawn: (cmd, args, o) => { call = { cmd, args, o }; return { status: 0, stdout: stream, stderr: '' }; } });
+  let call; const rv = claudeReviewer({ env: CLAUDE_ONLY, spawn: (cmd, args, o) => { call = { cmd, args, o }; return { status: 0, stdout: stream, stderr: '' }; } });
   const prompt = 'x'.repeat(40000); assert.equal(rv(prompt).does_what_was_asked, true);
   assert.equal(call.o.input, prompt); assert.ok(!call.args.includes(prompt) && call.args.includes('-p'));
-  const nostart = claudeReviewer({ spawn: () => ({ error: { code: 'ENAMETOOLONG' } }) })('p');
+  const nostart = claudeReviewer({ env: CLAUDE_ONLY, spawn: () => ({ error: { code: 'ENAMETOOLONG' } }) })('p');
   assert.equal(nostart.does_what_was_asked, null); assert.equal(nostart.details, 'the reviewer could not start: ENAMETOOLONG');
-  const died = claudeReviewer({ spawn: () => ({ status: 1, stdout: '', stderr: 'starting\nError: not logged in\n' }) })('p');
+  const died = claudeReviewer({ env: CLAUDE_ONLY, spawn: () => ({ status: 1, stdout: '', stderr: 'starting\nError: not logged in\n' }) })('p');
   assert.equal(died.does_what_was_asked, null); assert.equal(died.details, 'the reviewer ended without a verdict (exit 1): starting | Error: not logged in');
 });
 
@@ -99,4 +101,26 @@ test('AC2: the reviewer is told the index of normative documents is next to the 
   const g = reviewInputs(d, {}); assert.deepEqual(g.files, ['docs/standards/general/security.md', 'docs/standards/normative.md']);
   const p = reviewerPrompt('req', 'diff', { agent: true, given: g });
   assert.match(p, /docs\/standards\/normative\.md is the index of the normative documents/); assert.match(p, /SCS v2.0 clause 4.2/); assert.match(p, /never fetch a link/i); assert.match(p, /needs the document itself/);
+});
+
+test('AC1: parseReviewerStream parses Antigravity stream-json tool events (read_file, view_file, grep_search, find_by_name, run_command) and reads the verdict from result.response', () => {
+  const agyStream = [
+    ev({ event: 'step_update', step_update: { step_index: 1, state: 'ACTIVE', step_type: 'tool', tool_name: 'read_file', tool_info: { name: 'read_file', parameters: { Path: '/r/core/a.js' } } } }),
+    ev({ event: 'step_update', step_update: { step_index: 1, state: 'DONE', step_type: 'tool', tool_name: 'read_file', tool_info: { name: 'read_file', parameters: { Path: '/r/core/a.js' }, output: 'ok' } } }),
+    ev({ event: 'step_update', step_update: { step_index: 2, state: 'DONE', step_type: 'tool', tool_name: 'view_file', tool_info: { name: 'view_file', parameters: { AbsolutePath: '/r/core/b.js' } } } }),
+    ev({ event: 'step_update', step_update: { step_index: 3, state: 'DONE', step_type: 'tool', tool_name: 'grep_search', tool_info: { name: 'grep_search', parameters: { SearchPath: '/r/docs' } } } }),
+    ev({ event: 'step_update', step_update: { step_index: 4, state: 'DONE', step_type: 'tool', tool_name: 'find_by_name', tool_info: { name: 'find_by_name', parameters: { SearchDirectory: '/r/core/src' } } } }),
+    ev({ event: 'step_update', step_update: { step_index: 5, state: 'DONE', step_type: 'tool', tool_name: 'run_command', tool_info: { name: 'run_command', parameters: { CommandLine: 'git show abc1234 -- c.js' } } } }),
+    ev({ event: 'step_update', step_update: { step_index: 6, state: 'ERROR', step_type: 'tool', tool_name: 'read_file', tool_info: { name: 'read_file', parameters: { Path: '/r/core/missing.js' } } } }),
+    ev({ event: 'result', result: { status: 'SUCCESS', response: 'Verdict:\n{"does_what_was_asked": true, "weakens_or_hides_checks": false, "unspecified_decisions": [], "details": "checked"}', duration_seconds: 4.2, num_turns: 2 } }),
+  ].join('\n');
+  const o = parseReviewerStream(agyStream);
+  assert.equal(o.ended, true);
+  assert.equal(o.review.does_what_was_asked, true);
+  assert.deepEqual(o.read, ['/r/core/a.js', '/r/core/b.js', '/r/docs', '/r/core/src']);
+  assert.deepEqual(o.commands, ['git show abc1234 -- c.js']);
+  assert.deepEqual(filesOpened(['core/a.js', 'core/b.js', 'c.js', 'core/missing.js'], o, '/r'), ['core/a.js', 'core/b.js', 'c.js']);
+  const noVerdict = parseReviewerStream(ev({ event: 'result', result: { status: 'SUCCESS', response: 'I could not finish' } }));
+  assert.equal(noVerdict.ended, true); assert.equal(noVerdict.review.does_what_was_asked, null);
+  assert.match(noVerdict.review.details, /^reviewer failed: it answered "I could not finish"/);
 });
